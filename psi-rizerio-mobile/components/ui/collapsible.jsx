@@ -1,4 +1,4 @@
-import { PropsWithChildren, useState } from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, TouchableOpacity } from 'react-native';
 
 import { ThemedText } from './../themed-text';
@@ -7,7 +7,7 @@ import { IconSymbol } from './../ui/icon-symbol';
 import { Colors } from './../../constants/theme';
 import { useColorScheme } from './../../hooks/use-color-scheme';
 
-export function Collapsible({ children, title }: PropsWithChildren & { title: string }) {
+export function Collapsible({ children, title }) {
   const [isOpen, setIsOpen] = useState(false);
   const theme = useColorScheme() ?? 'light';
 

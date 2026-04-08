@@ -1,10 +1,10 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { ActivityIndicator, StyleSheet, View, useColorScheme } from 'react-native';
 import { ThemedText } from './../../components/themed-text';
 import { ThemedView } from './../../components/themed-view';
 import { Colors } from './../../constants/theme';
-import { useColorScheme } from 'react-native';
 import { useRouter } from 'expo-router';
+import { clearSession, postLogout } from '../../services/authService';
 
 export default function LogoutScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -13,10 +13,13 @@ export default function LogoutScreen() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      router.replace('/');
+      clearSession();
+      postLogout().finally(() => {
+        router.replace('/(auth)/login');
+      });
     }, 1500);
     return () => clearTimeout(timer);
-  }, []);
+  }, [router]);
 
   return (
     <ThemedView style={styles.container}>
