@@ -30,6 +30,14 @@ const MAPPING = {
   'cloud.rain.fill': { family: 'Ionicons', name: 'rainy' },
   'checkmark.circle.fill': { family: 'Ionicons', name: 'checkmark-circle' },
   'xmark.circle.fill': { family: 'Ionicons', name: 'close-circle' },
+  'calendar': { family: 'Ionicons', name: 'calendar' },
+  'bubble.left.and.bubble.right': { family: 'Ionicons', name: 'chatbubbles' },
+  'person.3': { family: 'Ionicons', name: 'people' },
+  'person.2': { family: 'Ionicons', name: 'people-outline' },
+  'line.3.horizontal.decrease': { family: 'Ionicons', name: 'filter' },
+  'magnifyingglass': { family: 'Ionicons', name: 'search' },
+  'plus': { family: 'Ionicons', name: 'add' },
+  'pencil.and.scribble': { family: 'Ionicons', name: 'create-outline' },
 };
 
 export function IconSymbol({

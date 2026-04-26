@@ -1,25 +1,41 @@
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { DrawerContentComponentProps, DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawer';
 import { ThemedText } from './themed-text';
 import { IconSymbol } from './ui/icon-symbol';
-import { Colors } from './../constants/theme';
-import { useColorScheme } from './../hooks/use-color-scheme';
+import { isClienteRole } from '../constants/role-theme';
 
 export function CustomDrawerContent(props) {
-  const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
-
+  const { primaryColor = '#1B66A4', role } = props;
+  const isCliente = isClienteRole(role);
   const activeRoute = props.state.routes[props.state.index];
-  let headerTitle = 'Meus Agendamentos';
+  let headerTitle = isCliente ? 'Home' : 'Dashboard';
   
-  if (activeRoute.name === 'settings') headerTitle = 'Configurações';
+  if (activeRoute.name === 'agendamentos') headerTitle = isCliente ? 'Meus Agendamentos' : 'Agendamentos';
+  else if (activeRoute.name === 'pacientes') headerTitle = 'Meus Pacientes';
+  else if (activeRoute.name === 'settings') headerTitle = 'Configurações';
   else if (activeRoute.name === 'feedback') headerTitle = 'Feedbacks';
+  else if (activeRoute.name === 'psicologos') headerTitle = 'Psicólogos';
+  else if (activeRoute.name === 'administracao') headerTitle = 'Administração';
   else if (activeRoute.name === 'change-password') headerTitle = 'Alterar Senha';
   else if (activeRoute.name === 'logout') headerTitle = 'Sair';
 
+  const menuItems = isCliente
+    ? [
+        { name: 'index', label: 'Home', iconName: 'house' },
+        { name: 'settings', label: 'Configurações', iconName: 'gear' },
+        { name: 'agendamentos', label: 'Meus Agendamentos', iconName: 'calendar' },
+        { name: 'feedback', label: 'Feedbacks', iconName: 'bubble.left.and.bubble.right' },
+      ]
+    : [
+        { name: 'index', label: 'Dashboard', iconName: 'house' },
+        { name: 'agendamentos', label: 'Agendamentos', iconName: 'calendar' },
+        { name: 'pacientes', label: 'Meus Pacientes', iconName: 'person.2' },
+        { name: 'psicologos', label: 'Psicólogos', iconName: 'person.3' },
+        { name: 'administracao', label: 'Administração', iconName: 'gear' },
+      ];
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: '#C0ADEF' }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: primaryColor }]}> 
       <View style={styles.header}>
         <TouchableOpacity onPress={() => props.navigation.closeDrawer()}>
           <IconSymbol name="xmark" size={24} color="#FFF" />
@@ -28,24 +44,11 @@ export function CustomDrawerContent(props) {
       </View>
 
       <View style={styles.menuContainer}>
-        {props.state.routes.map((route, index) => {
-          const isFocused = props.state.index === index;
-          
-          let iconName= 'house';
-          let label = '';
-          
-          if (route.name === 'index') {
-            iconName = 'house';
-            label = 'Home';
-          } else if (route.name === 'settings') {
-            iconName = 'gear';
-            label = 'Configurações';
-          } else if (route.name === 'feedback') {
-            iconName = 'doc.text';
-            label = 'Feedbacks';
-          } else {
-            return null; // Skip routes we don't want in the main menu
-          }
+        {menuItems.map((item) => {
+          const route = props.state.routes.find((entry) => entry.name === item.name);
+          if (!route) return null;
+
+          const isFocused = activeRoute.name === item.name;
 
           return (
             <TouchableOpacity 
@@ -54,10 +57,10 @@ export function CustomDrawerContent(props) {
                 styles.menuItem, 
                 isFocused && { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 15 }
               ]} 
-              onPress={() => props.navigation.navigate(route.name)}
+              onPress={() => props.navigation.navigate(item.name)}
             >
-              <IconSymbol name={iconName} size={24} color="#FFF" />
-              <ThemedText style={styles.menuText}>{label}</ThemedText>
+              <IconSymbol name={item.iconName} size={24} color="#FFF" />
+              <ThemedText style={styles.menuText}>{item.label}</ThemedText>
             </TouchableOpacity>
           );
         })}
