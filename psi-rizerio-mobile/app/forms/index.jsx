@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColor } from '../../hooks/use-theme-color';
+import { registerPatient } from '../../services/authService';
 
 import PersonalDataStep from '../../components/personal-data';
 import LocaleStep from '../../components/locale';
@@ -84,14 +85,41 @@ export default function FormularioIndex() {
     }
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (canProgress()) {
-      if (step < 4) setStep(step + 1);
-      else alert('Formulário enviado!');
+      if (step < 4) {
+        setStep(step + 1);
+      } else {
+        try {
+          // No sistema real, a senha deveria ser pedida no form. 
+          // Como não está no layout, usaremos uma padrão para o primeiro acesso.
+          const registrationData = {
+            name: values.name,
+            email: `${values.cpf.replace(/\D/g, '')}@psirizerio.com`, // Email improvisado se não houver
+            password: 'Senha@123', 
+            birthDate: values.birthDate.split('/').reverse().join('-'), // Converte para YYYY-MM-DD
+            cpf: values.cpf,
+            phone: values.phone,
+            emergencyContact: values.emergencyContact,
+            emergencyPhone: values.emergencyPhone,
+            address: values.address,
+            neighborhood: values.neighborhood,
+            city: values.city,
+            state: values.state,
+            cep: values.cep,
+          };
+
+          await registerPatient(registrationData);
+          alert('Cadastro realizado com sucesso! Use seu CPF para logar com a senha Senha@123');
+          router.replace('/(drawer)');
+        } catch (error) {
+          alert('Erro ao realizar cadastro: ' + error.message);
+        }
+      }
     } else {
-      alert ('Por favor, preencha todos os campos corretamente.')
+      alert('Por favor, preencha todos os campos corretamente.');
     }
-  }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: bgColor }]}>

@@ -1,6 +1,5 @@
-import React from 'react';
-import { View } from 'react-native';
+import { Redirect } from 'expo-router';
 
-export default function FormularioIndexScreen() {
-	return <View />;
+export default function FormularioIndex() {
+  return <Redirect href="/(formulario)/step1" />;
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 function getInitials(nomeCompleto) {
   const normalized = String(nomeCompleto || '').trim();
@@ -9,7 +9,7 @@ function getInitials(nomeCompleto) {
   return parts.map((part) => part[0]).join('').toUpperCase();
 }
 
-export function PacienteCard({ paciente, primaryColor = '#1B66A4', onEdit, onSchedule, onDashboard }) {
+export function PacienteCard({ paciente, primaryColor = '#1B66A4', onEdit, onSchedule, onDashboard, onReports }) {
   const nomeCompleto = String(paciente?.nomeCompleto || paciente?.nome || 'Paciente').trim();
   const telefone = paciente?.telefone || paciente?.dadosPaciente?.telefoneEmergencia || '--';
   const emergencia = paciente?.dadosPaciente?.contatoEmergencia || paciente?.dadosPaciente?.telefoneEmergencia || '--';
@@ -60,6 +60,16 @@ export function PacienteCard({ paciente, primaryColor = '#1B66A4', onEdit, onSch
       </View>
 
       <Pressable
+        style={[styles.dashboardBtn, { borderColor: primaryColor, marginTop: 8 }]}
+        onPress={onReports}
+        accessibilityRole="button"
+        accessibilityLabel={`Acessar relatórios do paciente ${nomeCompleto}`}
+      >
+        <MaterialCommunityIcons name="brain" size={14} color={primaryColor} />
+        <Text style={[styles.dashboardBtnText, { color: primaryColor }]}>Relatórios de IA</Text>
+      </Pressable>
+
+      <Pressable
         style={[styles.dashboardBtn, { borderColor: primaryColor }]}
         onPress={onDashboard}
         accessibilityRole="button"
@@ -80,6 +90,7 @@ const styles = StyleSheet.create({
     borderColor: '#d1d5db',
     padding: 12,
     gap: 10,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
   },
   rowTop: {
     flexDirection: 'row',

@@ -2,13 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { CustomAlert } from '../CustomAlert';
 import { ThemedView } from '../themed-view';
 import { getCurrentSession } from '../../services/authService';
-import { getAgendamentos, listClientes } from '../../services/dashboardService';
+import { getAgendamentos, getPacientes } from '../../services/dashboardService';
 
-const PRIMARY_COLOR = '#1B66A4';
+import { ROLE_PRIMARY_COLOR as PRIMARY_COLOR } from '../../constants/role-theme';
 
 function getMonday(date = new Date()) {
   const current = new Date(date);
@@ -45,39 +46,43 @@ export function DashboardProfissional() {
 
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState([]);
+  const [patients, setPatients] = useState([]);
   const [alert, setAlert] = useState({ visible: false, title: '', message: '', type: 'success' });
 
-  useEffect(() => {
-    const session = getCurrentSession();
-    if (!session) {
-      router.replace('/(auth)/login');
-      return;
-    }
-
-    const load = async () => {
-      setLoading(true);
-      try {
-        const data = await getAgendamentos();
-        setSessions(Array.isArray(data) ? data : []);
-      } catch (error) {
-        setAlert({
-          visible: true,
-          title: 'Erro',
-          message: error.message || 'Nao foi possivel carregar o dashboard.',
-          type: 'error',
-        });
-      } finally {
-        setLoading(false);
+  useFocusEffect(
+    React.useCallback(() => {
+      const session = getCurrentSession();
+      if (!session) {
+        router.replace('/(auth)/login');
+        return;
       }
-    };
 
-    load();
-  }, [router]);
+      const load = async () => {
+        setLoading(true);
+        try {
+          const [sessionsData, patientsData] = await Promise.all([getAgendamentos(), getPacientes()]);
+          setSessions(Array.isArray(sessionsData) ? sessionsData : []);
+          setPatients(Array.isArray(patientsData) ? patientsData : []);
+        } catch (error) {
+          setAlert({
+            visible: true,
+            title: 'Erro',
+            message: error.message || 'Nao foi possivel carregar o dashboard.',
+            type: 'error',
+          });
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      load();
+    }, [router])
+  );
 
   const metrics = useMemo(() => {
     const total = sessions.length;
     const canceladas = sessions.filter((item) => String(item.statusSessao || item.status).toUpperCase() === 'CANCELADA').length;
-    const inativos = listClientes().filter((item) => item.ativo === false).length;
+    const inativos = patients.filter((item) => item.ativo === false).length;
     const weekStart = getMonday();
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 4);
@@ -92,10 +97,10 @@ export function DashboardProfissional() {
       canceladas,
       inativos,
       weeklySessions,
-      inactivePercent: toPercent(inativos, Math.max(listClientes().length, 1)),
+      inactivePercent: toPercent(inativos, Math.max(patients.length, 1)),
       cancelPercent: toPercent(canceladas, Math.max(total, 1)),
     };
-  }, [sessions]);
+  }, [sessions, patients]);
 
   const recentSessions = useMemo(() => {
     return [...sessions]
@@ -253,7 +258,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: '#1d4ed8',
+    backgroundColor: PRIMARY_COLOR,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -335,7 +340,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 12,
     borderLeftWidth: 4,
-    borderLeftColor: '#1d4ed8',
+    borderLeftColor: PRIMARY_COLOR,
   },
   sessionInfo: {
     flex: 1,

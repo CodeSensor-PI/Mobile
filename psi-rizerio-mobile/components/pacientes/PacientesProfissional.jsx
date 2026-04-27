@@ -182,9 +182,9 @@ export function PacientesProfissional() {
     }
 
     const payload = {
-      nome: `${values.nome.trim()} ${values.sobrenome.trim()}`.trim(),
+      name: `${values.nome.trim()} ${values.sobrenome.trim()}`.trim(),
       email: values.email.trim(),
-      telefone: values.telefoneEmergencia || '',
+      phone: values.telefoneEmergencia || '',
       psicologoId: Number(session?.usuario?.id) || 1,
       role: { id: 2, role: 'CLIENTE' },
       ativo: true,
@@ -236,6 +236,13 @@ export function PacientesProfissional() {
     router.push('/(drawer)/agendamentos');
   };
 
+  const handleReports = (paciente) => {
+    router.push({
+      pathname: '/(drawer)/relatorios-ia',
+      params: { patientId: paciente.id, patientName: paciente.nomeCompleto }
+    });
+  };
+
   const handleOpenPatientDashboard = () => {
     setAlert({
       visible: true,
@@ -282,6 +289,7 @@ export function PacientesProfissional() {
               onEdit={() => openEdit(paciente)}
               onSchedule={handleSchedule}
               onDashboard={handleOpenPatientDashboard}
+              onReports={() => handleReports(paciente)}
             />
           ))}
         </ScrollView>

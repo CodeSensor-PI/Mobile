@@ -11,9 +11,8 @@ import { getPrimaryColorForRole } from '../../constants/role-theme';
 import { getCurrentSession } from '../../services/authService';
 import {
   cancelAgendamento,
-  findClienteById,
-  listClientes,
   paginacaoGetAgendamentos,
+  getPacientes,
   postAgendamento,
   putAgendamento,
 } from '../../services/dashboardService';
@@ -112,6 +111,7 @@ export default function AgendamentosScreen() {
   const [editingId, setEditingId] = useState(null);
   const [clientQuery, setClientQuery] = useState('');
   const [selectedClientId, setSelectedClientId] = useState('');
+  const [clientes, setClientes] = useState([]);
   const [form, setForm] = useState({
     date: '',
     hour: '',
@@ -121,7 +121,6 @@ export default function AgendamentosScreen() {
   const [alert, setAlert] = useState({ visible: false, title: '', message: '', type: 'success' });
 
   const weekDays = useMemo(() => getCurrentWeekDays(offsetSemana), [offsetSemana]);
-  const clientes = useMemo(() => listClientes(), []);
 
   useEffect(() => {
     if (!getCurrentSession()) {
@@ -132,16 +131,19 @@ export default function AgendamentosScreen() {
     const load = async () => {
       setLoading(true);
       try {
-        const segunda = weekDays[0]?.iso;
-        const data = await paginacaoGetAgendamentos({ segunda, size: 40 });
-        const list = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.content)
-            ? data.content
+        const [agendamentosData, pacientesData] = await Promise.all([
+          paginacaoGetAgendamentos({ segunda: weekDays[0]?.iso, size: 40 }),
+          getPacientes(),
+        ]);
+        const list = Array.isArray(agendamentosData)
+          ? agendamentosData
+          : Array.isArray(agendamentosData?.content)
+            ? agendamentosData.content
             : [];
         const normalized = list.map(normalizeSession);
         setAgendamentos(normalized);
         setExpandedDate(weekDays[0]?.iso || '');
+        setClientes(Array.isArray(pacientesData) ? pacientesData : []);
       } catch (error) {
         setAlert({
           visible: true,
@@ -214,8 +216,7 @@ export default function AgendamentosScreen() {
   };
 
   const refresh = async () => {
-    const segunda = weekDays[0]?.iso;
-    const data = await paginacaoGetAgendamentos({ segunda, size: 40 });
+    const data = await paginacaoGetAgendamentos({ segunda: weekDays[0]?.iso, size: 40 });
     const list = Array.isArray(data)
       ? data
       : Array.isArray(data?.content)
@@ -240,7 +241,7 @@ export default function AgendamentosScreen() {
       return;
     }
 
-    const cliente = findClienteById(selectedClientId);
+    const cliente = clientes.find((item) => String(item.id) === String(selectedClientId));
     if (!cliente) {
       openError('Paciente selecionado não encontrado.');
       return;

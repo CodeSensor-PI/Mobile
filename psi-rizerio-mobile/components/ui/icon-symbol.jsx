@@ -38,6 +38,7 @@ const MAPPING = {
   'magnifyingglass': { family: 'Ionicons', name: 'search' },
   'plus': { family: 'Ionicons', name: 'add' },
   'pencil.and.scribble': { family: 'Ionicons', name: 'create-outline' },
+  'brain': { family: 'MaterialIcons', name: 'psychology' },
 };
 
 export function IconSymbol({

@@ -60,11 +60,11 @@ export default function LoginScreen() {
       const roleName = String(role?.role || role || '').trim().toUpperCase();
 
       const nextRoute =
-        roleId === 1 || roleName === 'PSICOLOGO'
+        roleId === 1 || roleName === 'PSICOLOGO' || roleName === 'PSYCHOLOGIST' || roleName === 'ADMIN'
           ? '/(drawer)'
           : roleId === 3 || roleName === 'PSICOLOGO_ASSISTENTE'
             ? '/(drawer)'
-            : roleId === 2 || roleName === 'CLIENTE'
+            : roleId === 2 || roleName === 'CLIENTE' || roleName === 'USER'
               ? '/(drawer)'
             : '';
 
@@ -75,12 +75,7 @@ export default function LoginScreen() {
 
       setStatus('success');
       setSuccessRoute(nextRoute);
-      setAlert({
-        visible: true,
-        title: 'Sucesso',
-        message: `Bem-vindo, ${session?.usuario?.nome || 'usuário'}!`,
-        type: 'success',
-      });
+      router.replace(nextRoute);
     } catch (error) {
       openError(error.message || 'Falha no login. Tente novamente.');
     }
@@ -160,12 +155,12 @@ export default function LoginScreen() {
                 textStyle={styles.googleText}
               />
 
-              <Pressable onPress={() => router.push('/(auth)/esqueceu-senha')}>
+              <Pressable onPress={() => router.push('/(formulario)')}>
                 <Text style={styles.signUpText}>Nao possui conta ainda? Cadastre-se</Text>
               </Pressable>
             </View>
 
-            <View style={styles.decorativeWrap} pointerEvents="none">
+            <View style={[styles.decorativeWrap, { pointerEvents: 'none' }]}>
               <View style={styles.decorativeCircle} />
               <View style={styles.decorativeCircleMirror} />
             </View>

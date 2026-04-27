@@ -1,11 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 
 import { AppointmentCard } from '../AppointmentCard';
 import { CustomAlert } from '../CustomAlert';
 import { getCurrentSession } from '../../services/authService';
-import { getAgendamentosPorPaciente } from '../../services/dashboardService';
+import {
+  getAgendamentosPorPaciente,
+  getFeedbacksByPatient,
+  getPacientePorUserId,
+} from '../../services/dashboardService';
 
 function formatDate(iso) {
   if (!iso) return '';
@@ -19,32 +24,52 @@ function statusToCard(status) {
   return 'Concluido';
 }
 
-function feedbackByStatus(status) {
+function feedbackByStatus(status, hasFeedback) {
   const normalized = String(status || '').toUpperCase();
-  if (normalized === 'CONCLUIDA') return 'Pendente';
+  if (normalized === 'CONCLUIDA') return hasFeedback ? 'Finalizado' : 'Pendente';
   if (normalized === 'CANCELADA') return 'Finalizado';
   return undefined;
 }
 
 export function AgendamentosCliente() {
   const session = getCurrentSession();
+  const router = useRouter();
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertMsg, setAlertMsg] = useState('');
-
   const [items, setItems] = useState([]);
 
   useEffect(() => {
     let isMounted = true;
     const load = async () => {
       try {
-        const userId = session?.usuario?.id;
-        const data = await getAgendamentosPorPaciente(userId);
+        const patient = await getPacientePorUserId(session?.usuario?.id);
+        const [data, feedbacks] = patient?.id
+          ? await Promise.all([
+              getAgendamentosPorPaciente(patient.id),
+              getFeedbacksByPatient(patient.id),
+            ])
+          : [[], []];
+
+        const feedbackSessionIds = new Set(
+          (Array.isArray(feedbacks) ? feedbacks : [])
+            .map((item) => item?.sessaoId)
+            .filter(Boolean)
+            .map((id) => String(id))
+        );
+
+        const mapped = (Array.isArray(data) ? data : []).map((item) => ({
+          ...item,
+          hasFeedback: feedbackSessionIds.has(String(item?.id)),
+        }));
+
         if (isMounted) {
-          setItems(Array.isArray(data) ? data : []);
+          setItems(mapped);
         }
       } catch (_error) {
         if (isMounted) {
           setItems([]);
+          setAlertMsg('Não foi possível carregar seus agendamentos. Verifique sua conexão.');
+          setAlertVisible(true);
         }
       }
     };
@@ -63,7 +88,7 @@ export function AgendamentosCliente() {
       time: item.hora?.slice(0, 5) || item.hora || '',
       location: 'Online',
       status: statusToCard(item.statusSessao || item.status),
-      feedback: feedbackByStatus(item.statusSessao || item.status),
+      feedback: feedbackByStatus(item.statusSessao || item.status, item.hasFeedback),
     }));
   }, [items]);
 
@@ -74,7 +99,7 @@ export function AgendamentosCliente() {
 
         {cards.length === 0 ? (
           <View style={styles.emptyWrap}>
-            <Text style={styles.emptyText}>Voce ainda nao possui agendamentos.</Text>
+            <Text style={styles.emptyText}>Você ainda não possui agendamentos.</Text>
           </View>
         ) : (
           cards.map((card) => (
@@ -86,12 +111,18 @@ export function AgendamentosCliente() {
               status={card.status}
               feedback={card.feedback}
               onAction={() => {
-                setAlertMsg('Solicitacao de cancelamento enviada.');
+                setAlertMsg('Solicitação de cancelamento enviada.');
                 setAlertVisible(true);
               }}
               onFeedbackAction={() => {
-                setAlertMsg('Fluxo de feedback em breve.');
-                setAlertVisible(true);
+                router.push({
+                  pathname: '/(drawer)/feedback',
+                  params: {
+                    sessionId: card.id,
+                    sessionDate: card.date,
+                    sessionTime: card.time,
+                  },
+                });
               }}
             />
           ))
@@ -100,7 +131,7 @@ export function AgendamentosCliente() {
 
       <CustomAlert
         visible={alertVisible}
-        title="Atencao"
+        title="Atenção"
         message={alertMsg}
         type="warning"
         onClose={() => setAlertVisible(false)}

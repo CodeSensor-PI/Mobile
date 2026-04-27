@@ -7,8 +7,9 @@ export const Colors = {
   light: {
     text: '#000000',
     textSecondary: '#666666',
-    background: '#FAF7F2', // Creme do protótipo
+    background: '#FFFFFF', 
     tint: tintColorLight,
+    primary: '#1d4ed8', 
     
     // Configurações de Inputs
     inputLabel: '#000000',
@@ -33,6 +34,7 @@ export const Colors = {
     textSecondary: '#AAAAAA',
     background: '#151718',
     tint: tintColorDark,
+    primary: '#1B66A4', 
     
     // Configurações de Inputs
     inputLabel: '#FFFFFF',

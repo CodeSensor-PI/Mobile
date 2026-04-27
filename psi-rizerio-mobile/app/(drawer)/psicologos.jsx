@@ -13,6 +13,7 @@ import { AuthTextInput } from '../../components/ui/AuthTextInput';
 import { getPrimaryColorForRole } from '../../constants/role-theme';
 import { getCurrentSession } from '../../services/authService';
 import { getPsicologos, postPsicologo, putPsicologo } from '../../services/dashboardService';
+import { digitsOnly, formatTelefone, formatCrp } from '../../utils/formatters';
 
 const INITIAL_FORM = {
   id: null,
@@ -28,22 +29,6 @@ const INITIAL_FORM = {
   },
 };
 
-function digitsOnly(value) {
-  return String(value || '').replace(/\D/g, '');
-}
-
-function formatTelefone(value) {
-  const digits = digitsOnly(value).slice(0, 11);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
-}
-
-function formatCrp(value) {
-  const digits = digitsOnly(value).slice(0, 8);
-  if (digits.length <= 2) return digits;
-  return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-}
 
 function normalizeEntry(item) {
   const role = item?.role || item?.fkRoles || { id: 3, role: 'PSICOLOGO' };

@@ -22,7 +22,7 @@ export function AppointmentCard({
   const getFeedbackIconColor = () => {
     if (feedback === 'Pendente') return '#FF5252';
     if (feedback === 'Em andamento') return '#FFD740';
-    if (feedback === 'Finalizado') return '#4CAF50';
+    if (feedback === 'Concluido') return '#4CAF50';
     return 'transparent';
   };
 

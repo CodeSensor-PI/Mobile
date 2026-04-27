@@ -1,10 +1,20 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, useColorScheme } from 'react-native';
 import { ThemedText } from './../../components/themed-text';
 import { ThemedView } from './../../components/themed-view';
 import { Colors } from './../../constants/theme';
 import { IconSymbol } from './../../components/ui/icon-symbol';
 import { CustomAlert } from './../../components/CustomAlert';
+import { getCurrentSession } from '../../services/authService';
+import {
+  getAgendamentosPorPaciente,
+  getFeedbacksByPatient,
+  getPacientePorUserId,
+  postFeedback,
+  getFeedbackBySession,
+} from '../../services/dashboardService';
+import { useLocalSearchParams } from 'expo-router';
+
 const sentiments = [
   { name: 'Muito bem', icon: 'sentiment.very.satisfied' },
   { name: 'Bem', icon: 'sentiment.satisfied' },
@@ -22,6 +32,7 @@ const climates = [
 export default function FeedbackScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
+  const { sessionId, sessionDate, sessionTime } = useLocalSearchParams();
   
   const [selectedFeeling, setSelectedFeeling] = useState(null);
   const [progress, setProgress] = useState(null);
@@ -29,6 +40,125 @@ export default function FeedbackScreen() {
   const [motivation, setMotivation] = useState(null);
   const [note, setNote] = useState('');
   const [alertVisible, setAlertVisible] = useState(false);
+  const [activeSession, setActiveSession] = useState({ id: null, date: '', time: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const sessionIdParam = Array.isArray(sessionId) ? sessionId[0] : sessionId;
+  const sessionDateParam = Array.isArray(sessionDate) ? sessionDate[0] : sessionDate;
+  const sessionTimeParam = Array.isArray(sessionTime) ? sessionTime[0] : sessionTime;
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadExistingFeedback = async (sid) => {
+      try {
+        const feedback = await getFeedbackBySession(sid);
+        if (feedback && mounted) {
+          if (feedback.moodScore) setSelectedFeeling(5 - feedback.moodScore);
+          
+          const content = feedback.content || "";
+          
+          const progressMatch = content.match(/Progresso avaliado: (\d)\/5/);
+          if (progressMatch) setProgress(parseInt(progressMatch[1]));
+          
+          const clarityMatch = content.match(/Nível de clareza: ([^.]+)/);
+          if (clarityMatch) {
+            const cName = clarityMatch[1].trim();
+            const cIndex = climates.findIndex(c => c.name === cName);
+            if (cIndex !== -1) setClarity(cIndex);
+          }
+          
+          const motivationMatch = content.match(/Motivado: ([^.]+)/);
+          if (motivationMatch) {
+            const mText = motivationMatch[1].trim();
+            if (mText === 'Sim') setMotivation(0);
+            else if (mText === 'Mais ou menos') setMotivation(1);
+            else if (mText === 'Não') setMotivation(2);
+          }
+          
+          const noteMatch = content.match(/Nota: (.*)/);
+          if (noteMatch) setNote(noteMatch[1].trim());
+        }
+      } catch (e) {
+        console.log("No existing feedback to load", e);
+      }
+    };
+
+    const loadPendingSession = async () => {
+      const session = getCurrentSession();
+
+      if (sessionIdParam) {
+        if (mounted) {
+          setActiveSession({
+            id: String(sessionIdParam),
+            date: sessionDateParam || '—',
+            time: sessionTimeParam || '',
+          });
+          loadExistingFeedback(sessionIdParam);
+        }
+        return;
+      }
+
+      try {
+        const patient = await getPacientePorUserId(session?.usuario?.id);
+        if (!patient?.id) {
+          return;
+        }
+
+        const [sessoes, feedbacks] = await Promise.all([
+          getAgendamentosPorPaciente(patient.id),
+          getFeedbacksByPatient(patient.id),
+        ]);
+
+        const sessoesComFeedback = new Set(
+          feedbacks
+            .map((item) => item?.sessaoId)
+            .filter(Boolean)
+            .map((id) => String(id))
+        );
+
+        const pendentes = (Array.isArray(sessoes) ? sessoes : [])
+          .filter((item) => String(item?.statusSessao || item?.status || '').toUpperCase() === 'CONCLUIDA')
+          .filter((item) => !sessoesComFeedback.has(String(item?.id)));
+
+        pendentes.sort((a, b) => new Date(b?.startTime || b?.data || 0) - new Date(a?.startTime || a?.data || 0));
+        const sessao = pendentes[0];
+
+        if (sessao && mounted) {
+          setActiveSession({
+            id: String(sessao.id),
+            date: sessao.data || '—',
+            time: sessao.hora || '',
+          });
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    loadPendingSession();
+
+    return () => {
+      mounted = false;
+    };
+  }, [sessionIdParam, sessionDateParam, sessionTimeParam]);
+
+  const titleDate = useMemo(() => {
+    if (!activeSession.date || activeSession.date === '—') {
+      return '—';
+    }
+
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(activeSession.date)) {
+      return activeSession.date;
+    }
+
+    const [year, month, day] = String(activeSession.date).split('-');
+    if (year && month && day) {
+      return `${day}/${month}/${year}`;
+    }
+
+    return activeSession.date;
+  }, [activeSession.date]);
 
   const getIconStyle = (index, selectedValue) => {
     if (selectedValue === null) return [];
@@ -45,15 +175,84 @@ export default function FeedbackScreen() {
     return sentimentColors[index];
   };
 
-  const handleSubmit = () => {
-    setAlertVisible(true);
+  const handleSubmit = async () => {
+    if (selectedFeeling === null) {
+      alert("Por favor, selecione como você se sentiu.");
+      return;
+    }
+
+    if (!activeSession.id) {
+      alert('Nenhuma sessão concluída pendente de feedback foi encontrada.');
+      return;
+    }
+
+    if (isSubmitting) {
+      return;
+    }
+
+    const session = getCurrentSession();
+    
+    let patientId = null;
+    try {
+      const patient = await getPacientePorUserId(session?.usuario?.id);
+      patientId = patient?.id;
+    } catch (e) {
+      console.error(e);
+    }
+
+    if (!patientId) {
+      alert("Não foi possível identificar o paciente vinculado à sua conta.");
+      return;
+    }
+    
+    // Convert 0-4 (Muito bem a Muito mal) to 5-1 (1 to 5 where 5 is best)
+    const moodScore = 5 - selectedFeeling;
+    
+    const contentParts = [];
+    if (progress !== null) contentParts.push(`Progresso avaliado: ${progress}/5`);
+    if (clarity !== null) contentParts.push(`Nível de clareza: ${climates[clarity].name}`);
+    if (motivation !== null) {
+      const motivationText = motivation === 0 ? 'Sim' : motivation === 1 ? 'Mais ou menos' : 'Não';
+      contentParts.push(`Motivado: ${motivationText}`);
+    }
+    if (note) contentParts.push(`Nota: ${note}`);
+    
+    const content = contentParts.join('. ') || "Feedback sem nota adicional.";
+
+    try {
+      setIsSubmitting(true);
+      await postFeedback({
+        patientId,
+        sessaoId: activeSession.id,
+        content,
+        moodScore,
+      });
+      setAlertVisible(true);
+    } catch (error) {
+      console.error(error);
+      const apiMessage = error?.data?.message || error?.message || 'Erro inesperado ao enviar feedback.';
+      alert("Erro ao enviar feedback: " + apiMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
 
   return (
     <ThemedView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <ThemedText style={styles.headerTitle}>
-          Referente a sessão do dia <ThemedText style={{ color: colors.primary, fontWeight: 'bold' }}>10/02 - Terça-Feira</ThemedText> às <ThemedText style={{ color: colors.primary, fontWeight: 'bold' }}>11:30</ThemedText> :
+          Referente a sessão do dia{' '}
+          <ThemedText style={{ color: colors.primary, fontWeight: 'bold' }}>
+            {titleDate}
+          </ThemedText>
+          {activeSession.time ? (
+            <>
+              {' '}às{' '}
+              <ThemedText style={{ color: colors.primary, fontWeight: 'bold' }}>{activeSession.time}</ThemedText>
+            </>
+          ) : null}
+          :
         </ThemedText>
 
         <View style={styles.section}>
@@ -172,10 +371,13 @@ export default function FeedbackScreen() {
         </View>
 
         <TouchableOpacity 
-          style={[styles.sendButton, { backgroundColor: colors.purpleLight }]} 
+           style={[styles.sendButton, { backgroundColor: colors.purpleLight, opacity: isSubmitting ? 0.6 : 1 }]} 
           onPress={handleSubmit}
+           disabled={isSubmitting}
         >
-           <ThemedText style={styles.sendButtonText}>Enviar</ThemedText>
+            <ThemedText style={styles.sendButtonText}>
+              {isSubmitting ? 'Enviando...' : (sessionIdParam ? 'Atualizar' : 'Enviar')}
+            </ThemedText>
         </TouchableOpacity>
 
         <CustomAlert 

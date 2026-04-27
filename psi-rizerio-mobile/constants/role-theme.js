@@ -1,19 +1,47 @@
-export const ROLE_PRIMARY_COLOR = '#1B66A4';
-export const DEFAULT_PRIMARY_COLOR = '#1d4ed8';
-export const CLIENT_DRAWER_COLOR = '#1B66A4';
+export const ROLE_PRIMARY_COLOR = '#1B66A4'; // Azul (Profissional)
+export const DEFAULT_PRIMARY_COLOR = '#db2777'; // Rosa (Paciente)
+export const CLIENT_DRAWER_COLOR = '#db2777';
+
+/**
+ * Normaliza o role recebido para uma string comparável.
+ * O backend retorna: "ADMIN", "PSYCHOLOGIST", "USER"
+ * O mock retorna: { id: 1, role: "PSICOLOGO" } ou strings legadas
+ */
+function getRoleName(role) {
+  if (!role) return '';
+  if (typeof role === 'string') return role.toUpperCase().trim();
+  if (typeof role === 'object') {
+    return String(role?.role || '').toUpperCase().trim();
+  }
+  return '';
+}
+
+export function isAdminRole(role) {
+  const name = getRoleName(role);
+  return name === 'ADMIN';
+}
 
 export function isPsicologoRole(role) {
-  const roleId = Number(role?.id);
-  const roleName = String(role?.role || '').toUpperCase();
-
-  return roleId === 1 || roleId === 3 || roleName === 'PSICOLOGO' || roleName === 'PSICOLOGO_ASSISTENTE';
+  const name = getRoleName(role);
+  const id = Number(role?.id);
+  return (
+    id === 1 || id === 3 ||
+    name === 'PSICOLOGO' ||
+    name === 'PSICOLOGO_ASSISTENTE' ||
+    name === 'PSYCHOLOGIST' ||
+    name === 'ADMIN'
+  );
 }
 
 export function isClienteRole(role) {
-  const roleId = Number(role?.id);
-  const roleName = String(role?.role || '').toUpperCase();
-
-  return roleId === 2 || roleName === 'CLIENTE';
+  const name = getRoleName(role);
+  const id = Number(role?.id);
+  return (
+    id === 2 ||
+    name === 'CLIENTE' ||
+    name === 'USER' ||
+    name === 'PATIENT'
+  );
 }
 
 export function getPrimaryColorForRole(role) {

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { PanResponder, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
@@ -8,26 +8,108 @@ import { ThemedText } from '../themed-text';
 import { ThemedView } from '../themed-view';
 import { Colors } from '../../constants/theme';
 import { useColorScheme } from '../../hooks/use-color-scheme';
+import { DEFAULT_PRIMARY_COLOR as PRIMARY_COLOR } from '../../constants/role-theme';
+import { getAgendamentosPorPaciente, getFeedbacksByPatient, getPacientePorUserId } from '../../services/dashboardService';
+import { getCurrentSession } from '../../services/authService';
 
-const MOCK_APPOINTMENTS = [
-  { id: '1', date: '14/02/2025', time: '10:30', location: 'Online', status: 'Agendado' },
-  { id: '2', date: '10/02/2025', time: '10:30', location: 'Online', status: 'Concluido', feedback: 'Pendente' },
-  { id: '3', date: '10/01/2025', time: '10:30', location: 'Online', status: 'Concluido', feedback: 'Em andamento' },
-  { id: '4', date: '10/01/2025', time: '10:30', location: 'Online', status: 'Concluido', feedback: 'Finalizado' },
-];
+function formatDate(isoDate) {
+  if (!isoDate) return '';
+  const [year, month, day] = String(isoDate).split('-');
+  return `${day}/${month}/${year}`;
+}
+
+function mapStatus(status) {
+  const normalized = String(status || '').toUpperCase();
+  if (normalized === 'CANCELADA') return 'Concluido';
+  if (normalized === 'CONCLUIDA') return 'Concluido';
+  return 'Agendado';
+}
 
 export function DashboardCliente() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const router = useRouter();
+  const session = getCurrentSession();
 
-  const today = new Date();
-  const [selectedDay, setSelectedDay] = useState(today.getDate());
-  const [currentMonth, setCurrentMonth] = useState(today.getMonth());
-  const [currentYear, setCurrentYear] = useState(today.getFullYear());
+  const todayRef = useRef(new Date());
+  const [selectedDay, setSelectedDay] = useState(todayRef.current.getDate());
+  const [currentMonth, setCurrentMonth] = useState(todayRef.current.getMonth());
+  const [currentYear, setCurrentYear] = useState(todayRef.current.getFullYear());
+  const [appointments, setAppointments] = useState([]);
 
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertMsg, setAlertMsg] = useState('');
+  const [lastApptText, setLastApptText] = useState('Verificando sua última consulta...');
+
+  useEffect(() => {
+    let active = true;
+
+    const load = async () => {
+      try {
+        const patient = await getPacientePorUserId(session?.usuario?.id);
+        if (!patient?.id) {
+          return;
+        }
+
+        const [sessions, feedbacks] = await Promise.all([
+          getAgendamentosPorPaciente(patient.id),
+          getFeedbacksByPatient(patient.id),
+        ]);
+        if (!active) {
+          return;
+        }
+
+        const feedbackSessionIds = new Set(
+          (Array.isArray(feedbacks) ? feedbacks : [])
+            .map((item) => item?.sessaoId)
+            .filter(Boolean)
+            .map((id) => String(id))
+        );
+
+        const concludedSessions = sessions.filter(item => mapStatus(item.statusSessao || item.status) === 'Concluido');
+        concludedSessions.sort((a, b) => new Date(b.data) - new Date(a.data));
+        
+        if (concludedSessions.length > 0) {
+          const lastDate = new Date(concludedSessions[0].data);
+          const diffTime = Math.abs(todayRef.current - lastDate);
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          const diffMonths = Math.floor(diffDays / 30);
+          
+          if (diffMonths > 0) {
+            setLastApptText(`Ja fazem X meses desde sua ultima consulta.`.replace('X', diffMonths));
+          } else {
+            setLastApptText(`Sua ultima consulta foi a ${diffDays} dias.`);
+          }
+        } else {
+          setLastApptText('Você ainda não possui consultas concluídas.');
+        }
+
+        setAppointments(
+          sessions.map((item) => ({
+            id: item.id,
+            date: formatDate(item.data),
+            time: item.hora,
+            location: 'Online',
+            status: mapStatus(item.statusSessao || item.status),
+            feedback:
+              String(item.statusSessao || item.status).toUpperCase() === 'CONCLUIDA'
+                ? (feedbackSessionIds.has(String(item.id)) ? 'Concluido' : 'Pendente')
+                : undefined,
+          }))
+        );
+      } catch (_error) {
+        if (active) {
+          setAppointments([]);
+        }
+      }
+    };
+
+    load();
+
+    return () => {
+      active = false;
+    };
+  }, [session?.usuario?.id]);
 
   const handleCancelAction = () => {
     setAlertMsg('Deseja realmente cancelar este agendamento?');
@@ -95,20 +177,20 @@ export function DashboardCliente() {
   return (
     <ThemedView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={[styles.banner, { borderColor: colors.primary }]}> 
+        <View style={[styles.banner, { borderColor: PRIMARY_COLOR }]}> 
           <ThemedText style={styles.bannerText}>
-            Ja fazem <ThemedText style={{ fontWeight: 'bold' }}>X meses</ThemedText> desde sua <ThemedText style={{ fontWeight: 'bold' }}>ultima</ThemedText> consulta.
+            {lastApptText}
           </ThemedText>
-          <TouchableOpacity style={[styles.bannerButton, { borderColor: colors.primary }]}> 
-            <ThemedText style={[styles.bannerButtonText, { color: colors.primary }]}>Agendar Retorno</ThemedText>
+          <TouchableOpacity style={[styles.bannerButton, { borderColor: PRIMARY_COLOR }]}> 
+            <ThemedText style={[styles.bannerButtonText, { color: PRIMARY_COLOR }]}>Agendar Retorno</ThemedText>
           </TouchableOpacity>
         </View>
 
         <View
           {...panResponder.panHandlers}
-          style={[styles.calendarContainer, { borderColor: colors.primary }]}
+          style={[styles.calendarContainer, { borderColor: PRIMARY_COLOR }]}
         >
-          <View style={[styles.calendarHeader, { backgroundColor: colors.primary }]}> 
+          <View style={[styles.calendarHeader, { backgroundColor: PRIMARY_COLOR }]}> 
             <TouchableOpacity
               onPress={() => {
                 if (currentMonth === 0) {
@@ -176,18 +258,42 @@ export function DashboardCliente() {
           </View>
         </View>
 
-        {MOCK_APPOINTMENTS.map((appointment) => (
-          <AppointmentCard
-            key={appointment.id}
-            date={appointment.date}
-            time={appointment.time}
-            location={appointment.location}
-            status={appointment.status}
-            feedback={appointment.feedback}
-            onAction={handleCancelAction}
-            onFeedbackAction={() => router.push('/(drawer)/feedback')}
-          />
-        ))}
+        {(() => {
+          const filteredAppointments = appointments.filter((app) => {
+            const [d, m, y] = app.date.split('/').map(Number);
+            return d === selectedDay && m === currentMonth + 1 && y === currentYear;
+          });
+
+          if (filteredAppointments.length === 0) {
+            return (
+              <View style={{ padding: 20, alignItems: 'center' }}>
+                <ThemedText style={{ color: colors.textSecondary }}>Nenhum agendamento para este dia.</ThemedText>
+              </View>
+            );
+          }
+
+          return filteredAppointments.map((appointment) => (
+            <AppointmentCard
+              key={appointment.id}
+              date={appointment.date}
+              time={appointment.time}
+              location={appointment.location}
+              status={appointment.status}
+              feedback={appointment.feedback}
+              onAction={handleCancelAction}
+              onFeedbackAction={() =>
+                router.push({
+                  pathname: '/(drawer)/feedback',
+                  params: {
+                    sessionId: appointment.id,
+                    sessionDate: appointment.date,
+                    sessionTime: appointment.time,
+                  },
+                })
+              }
+            />
+          ));
+        })()}
 
         <CustomAlert
           visible={alertVisible}
