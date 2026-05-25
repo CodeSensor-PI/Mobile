@@ -1,15 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 
 import { CustomAlert } from '../../components/CustomAlert';
 import { AuthButton } from '../../components/ui/AuthButton';
 import { AuthTextInput } from '../../components/ui/AuthTextInput';
 import { PasswordStrengthIndicator } from '../../components/ui/PasswordStrengthIndicator';
+import { RegistroModal } from '../../components/admin/RegistroModal';
 import { getCurrentSession, alterarSenha } from '../../services/authService';
-import { getPsicologoPorId, putPsicologo } from '../../services/dashboardService';
+import { getPsicologoPorId, putPsicologo, getAllUsers, updateUserRole, postPsicologo, postPaciente } from '../../services/dashboardService';
 
 function digitsOnly(value) {
   return String(value || '').replace(/\D/g, '');
@@ -68,6 +70,19 @@ export default function AdministracaoScreen() {
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [alert, setAlert] = useState({ visible: false, title: '', message: '', type: 'success' });
 
+  // Camera & Profile Photo
+  const [photo, setPhoto] = useState(null);
+
+  // Registration Modal
+  const [registroVisible, setRegistroVisible] = useState(false);
+  const [registering, setRegistering] = useState(false);
+
+  // User Management
+  const [usersVisible, setUsersVisible] = useState(false);
+  const [usersList, setUsersList] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
   const strength = useMemo(() => buildStrength(novaSenha), [novaSenha]);
   const passwordsMatch = useMemo(() => Boolean(novaSenha && confirmarSenha && novaSenha === confirmarSenha), [novaSenha, confirmarSenha]);
 
@@ -79,6 +94,12 @@ export default function AdministracaoScreen() {
     }
 
     setUserId(String(session.usuario.id));
+    
+    // Verifies if the user is an admin to show user management section
+    const userRole = session.usuario.role?.role || session.usuario.role;
+    if (String(userRole).toUpperCase() === 'ADMIN') {
+      setIsAdmin(true);
+    }
 
     const load = async () => {
       setLoading(true);
@@ -92,6 +113,9 @@ export default function AdministracaoScreen() {
         setEmail(data.email || '');
         setTelefone(formatTelefone(data.telefone || ''));
         setCrp(formatCrp(data.crp || ''));
+        if (data.photo) {
+          setPhoto(data.photo);
+        }
       } catch (error) {
         setAlert({
           visible: true,
@@ -165,6 +189,7 @@ export default function AdministracaoScreen() {
         nome,
         telefone: digitsOnly(telefone),
         crp: digitsOnly(crp),
+        photo,
       });
       openSuccess('Dados atualizados com sucesso!');
       setIsEditingGeneral(false);
@@ -173,6 +198,87 @@ export default function AdministracaoScreen() {
     } finally {
       setSavingGeneral(false);
     }
+  };
+
+  const handlePickImage = async () => {
+    if (!isEditingGeneral) {
+      openError('Clique em "Editar" para alterar sua foto de perfil.');
+      return;
+    }
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permissionResult.granted) {
+      openError('Permissão para acessar a câmera é necessária!');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets?.[0]?.base64) {
+      setPhoto(`data:image/jpeg;base64,${result.assets[0].base64}`);
+    }
+  };
+
+  const handleRegisterUser = async (form) => {
+    setRegistering(true);
+    try {
+      if (form.tipo === 'PACIENTE') {
+        await postPaciente({
+          nome: form.nome,
+          email: form.email,
+          telefone: form.telefone,
+          cpf: form.cpf,
+          dataNascimento: form.dataNascimento,
+          // Outros campos se necessário
+        });
+      } else {
+        await postPsicologo({
+          nome: form.nome,
+          email: form.email,
+          telefone: form.telefone,
+          crp: form.crp,
+          role: { role: form.tipo } // PSICOLOGO ou ADMIN
+        });
+      }
+      openSuccess(`Usuário ${form.nome} cadastrado com sucesso!`);
+      setRegistroVisible(false);
+    } catch (error) {
+      openError(error.message || 'Falha ao registrar usuário.');
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  const loadUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const users = await getAllUsers();
+      setUsersList(users);
+    } catch (error) {
+      openError('Erro ao carregar usuários.');
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const handleChangeRole = async (user, newRole) => {
+    try {
+      await updateUserRole(user.id, newRole);
+      openSuccess('Permissão atualizada com sucesso!');
+      loadUsers();
+    } catch (error) {
+      openError('Erro ao atualizar permissão.');
+    }
+  };
+
+  const openUserManagement = () => {
+    setUsersVisible(true);
+    loadUsers();
   };
 
   const savePassword = async () => {
@@ -236,12 +342,54 @@ export default function AdministracaoScreen() {
               </Pressable>
             </View>
 
+            <View style={styles.photoContainer}>
+              <Pressable onPress={handlePickImage} style={styles.photoButton}>
+                {photo ? (
+                  <Image source={{ uri: photo }} style={styles.profilePhoto} />
+                ) : (
+                  <View style={styles.photoPlaceholder}>
+                    <Ionicons name="person" size={40} color="#cbd5e1" />
+                  </View>
+                )}
+                {isEditingGeneral && (
+                  <View style={styles.cameraIconBadge}>
+                    <Ionicons name="camera" size={16} color="#fff" />
+                  </View>
+                )}
+              </Pressable>
+              <Text style={styles.photoHelper}>
+                {isEditingGeneral ? 'Toque para tirar uma foto' : 'Foto de Perfil'}
+              </Text>
+            </View>
+
             <AuthTextInput label="Nome" value={nome} onChangeText={setNome} placeholder="Nome completo" editable={isEditingGeneral} />
             <AuthTextInput label="E-mail" value={email} onChangeText={setEmail} placeholder="seu@email.com" keyboardType="email-address" autoComplete="email" textContentType="emailAddress" editable={isEditingGeneral} />
             <AuthTextInput label="Telefone" value={telefone} onChangeText={(value) => setTelefone(formatTelefone(value))} placeholder="(11) 98877-6655" keyboardType="phone-pad" editable={isEditingGeneral} />
             <AuthTextInput label="CRP" value={crp} onChangeText={(value) => setCrp(formatCrp(value))} placeholder="06/123456" keyboardType="number-pad" editable={false} />
 
             <AuthButton label={savingGeneral ? 'Salvando...' : 'Salvar Alterações'} loading={savingGeneral} disabled={!isEditingGeneral} onPress={saveGeneral} style={styles.cardAction} />
+          </View>
+
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Gerenciamento de Acessos:</Text>
+            </View>
+            <Text style={{ marginBottom: 12, color: '#475569' }}>
+              Adicione novos pacientes ou colegas psicólogos ao sistema.
+            </Text>
+            <AuthButton 
+              label="Cadastrar Novo Usuário" 
+              variant="secondary"
+              onPress={() => setRegistroVisible(true)} 
+            />
+            {isAdmin && (
+              <AuthButton 
+                label="Gerenciar Permissões" 
+                variant="secondary"
+                style={{ marginTop: 8 }}
+                onPress={openUserManagement} 
+              />
+            )}
           </View>
 
           <View style={styles.card}>
@@ -305,6 +453,59 @@ export default function AdministracaoScreen() {
           </View>
         </ScrollView>
       )}
+
+      <RegistroModal
+        visible={registroVisible}
+        saving={registering}
+        onClose={() => setRegistroVisible(false)}
+        onSave={handleRegisterUser}
+      />
+
+      {/* Modal de Gestão de Usuários */}
+      <Modal visible={usersVisible} animationType="slide" transparent onRequestClose={() => setUsersVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={[styles.modalHeader, { backgroundColor: '#1d4ed8' }]}>
+              <Text style={styles.modalTitle}>Gerenciar Usuários</Text>
+              <Pressable onPress={() => setUsersVisible(false)}>
+                <Ionicons name="close" size={24} color="#ffffff" />
+              </Pressable>
+            </View>
+
+            <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
+              {loadingUsers ? (
+                <Text style={{ textAlign: 'center', marginVertical: 20 }}>Carregando...</Text>
+              ) : (
+                usersList.map((usr) => (
+                  <View key={usr.id} style={styles.userListItem}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontWeight: 'bold' }}>{usr.nome || usr.name || usr.email}</Text>
+                      <Text style={{ fontSize: 12, color: '#64748b' }}>{usr.email}</Text>
+                    </View>
+                    <View style={styles.rolePickerWrapper}>
+                      {['CLIENTE', 'PSICOLOGO', 'ADMIN'].map((r) => (
+                        <Pressable 
+                          key={r}
+                          style={[
+                            styles.roleBadge, 
+                            (usr.role?.role || usr.role) === r && { backgroundColor: '#1d4ed8', borderColor: '#1d4ed8' }
+                          ]}
+                          onPress={() => handleChangeRole(usr, r)}
+                        >
+                          <Text style={[
+                            styles.roleBadgeText,
+                            (usr.role?.role || usr.role) === r && { color: '#fff' }
+                          ]}>{r}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       <CustomAlert visible={alert.visible} title={alert.title} message={alert.message} type={alert.type} onClose={handleCloseAlert} />
     </SafeAreaView>
@@ -381,5 +582,103 @@ const styles = StyleSheet.create({
   matchText: {
     marginTop: 4,
     fontWeight: '700',
+  },
+  photoContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+    marginTop: 8,
+  },
+  photoButton: {
+    position: 'relative',
+  },
+  profilePhoto: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: '#eef4fb',
+    borderWidth: 2,
+    borderColor: '#1d4ed8',
+  },
+  photoPlaceholder: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: '#eef2f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#dbe4f0',
+  },
+  cameraIconBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#1d4ed8',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  photoHelper: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#64748b',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    backgroundColor: '#eef4fb',
+    borderRadius: 24,
+    overflow: 'hidden',
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalTitle: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  modalContent: {
+    padding: 16,
+    gap: 8,
+  },
+  userListItem: {
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 8,
+  },
+  rolePickerWrapper: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
+  roleBadge: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  roleBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#475569',
   },
 });

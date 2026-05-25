@@ -26,6 +26,7 @@ function buildUserPayload(record) {
     email: record.email,
     telefone: record.telefone,
     role,
+    isFirstAccess: !record.cpf,
   };
 }
 
@@ -47,9 +48,9 @@ export async function postLogin(login) {
   }
 
   try {
-    const data = await requestJson('/login', {
+    const data = await requestJson('/api/v1/auth/authenticate', {
       method: 'POST',
-      body: { email, senha },
+      body: { email, password: senha },
       credentials: 'include',
     });
 
@@ -60,32 +61,9 @@ export async function postLogin(login) {
       email: payload.email || email,
     };
 
-    return persistSessionFromUser(user, data?.token || 'token-backend');
+    return persistSessionFromUser(user, data?.token);
   } catch (_error) {
-    const record = findPsicologoByEmail(email) || findClienteByEmail(email);
-
-    if (!record) {
-      throw buildError('Usuário ou senha inválidos.', 'INVALID_CREDENTIALS');
-    }
-
-    const role = record.role || record.fkRoles || {};
-    const allowedRole =
-      role.id === 1 ||
-      role.role === 'PSICOLOGO' ||
-      role.id === 3 ||
-      role.role === 'PSICOLOGO_ASSISTENTE' ||
-      role.id === 2 ||
-      role.role === 'CLIENTE';
-
-    if (!allowedRole) {
-      throw buildError('Perfil sem acesso ao aplicativo.', 'ROLE_NOT_ALLOWED');
-    }
-
-    if (record.senha !== senha || record.ativo === false || record.status === 'INATIVO') {
-      throw buildError('Usuário ou senha inválidos.', 'INVALID_CREDENTIALS');
-    }
-
-    return persistSessionFromUser(record);
+    throw buildError('Usuário ou senha inválidos.', 'INVALID_CREDENTIALS');
   }
 }
 
@@ -95,13 +73,13 @@ export async function loginPsicologo(email, senha) {
 
 export async function postLogout() {
   try {
-    await requestJson('/auth/logout', {
+    await requestJson('/api/v1/auth/logout', {
       method: 'POST',
       body: {},
       credentials: 'include',
     });
   } catch (_error) {
-    // Mantém logout local funcionando mesmo sem backend.
+    console.error(_error);
   } finally {
     setSession(null);
   }

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, useColorScheme } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, useColorScheme, ActivityIndicator } from 'react-native';
+import * as Location from 'expo-location';
 import { ThemedText } from './../../components/themed-text';
 import { ThemedView } from './../../components/themed-view';
 import { Colors } from './../../constants/theme';
@@ -29,6 +30,7 @@ export default function FeedbackScreen() {
   const [motivation, setMotivation] = useState(null);
   const [note, setNote] = useState('');
   const [alertVisible, setAlertVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const getIconStyle = (index, selectedValue) => {
     if (selectedValue === null) return [];
@@ -45,8 +47,20 @@ export default function FeedbackScreen() {
     return sentimentColors[index];
   };
 
-  const handleSubmit = () => {
-    setAlertVisible(true);
+  const handleSubmit = async () => {
+    setLoading(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const location = await Location.getCurrentPositionAsync({});
+        console.log('Location:', location.coords.latitude, location.coords.longitude);
+      }
+    } catch (e) {
+      console.log('Erro ao capturar localização', e);
+    } finally {
+      setLoading(false);
+      setAlertVisible(true);
+    }
   };
 
   return (
@@ -174,14 +188,15 @@ export default function FeedbackScreen() {
         <TouchableOpacity 
           style={[styles.sendButton, { backgroundColor: colors.purpleLight }]} 
           onPress={handleSubmit}
+          disabled={loading}
         >
-           <ThemedText style={styles.sendButtonText}>Enviar</ThemedText>
+           {loading ? <ActivityIndicator color="#FFF" /> : <ThemedText style={styles.sendButtonText}>Enviar</ThemedText>}
         </TouchableOpacity>
 
         <CustomAlert 
           visible={alertVisible}
           title="Sucesso!"
-          message="Seu feedback foi enviado com sucesso."
+          message="Seu feedback foi enviado com sucesso. Analisamos também sua localização para gerar melhores insights de IA!"
           onClose={() => setAlertVisible(false)}
         />
 

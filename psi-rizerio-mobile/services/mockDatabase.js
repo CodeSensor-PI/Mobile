@@ -46,6 +46,8 @@ const state = {
       psicologoId: 1,
       role: { id: 2, role: 'CLIENTE' },
       ativo: true,
+      latitude: -23.550520,
+      longitude: -46.633308,
     },
     {
       id: '102',
@@ -56,6 +58,20 @@ const state = {
       psicologoId: 2,
       role: { id: 2, role: 'CLIENTE' },
       ativo: true,
+      latitude: -23.559616,
+      longitude: -46.658027,
+    },
+    {
+      id: '103',
+      nome: 'Novo Paciente',
+      email: 'novo.paciente@email.com',
+      senha: '123456',
+      telefone: '11988883030',
+      psicologoId: 1,
+      role: { id: 2, role: 'CLIENTE' },
+      ativo: true,
+      latitude: -23.5600,
+      longitude: -46.6600,
     },
   ],
   sessoes: [
@@ -111,6 +127,8 @@ const asClienteResponse = (entry) => ({
     mensal: entry?.planos?.mensal !== false,
     anual: Boolean(entry?.planos?.anual),
   },
+  latitude: entry?.latitude || null,
+  longitude: entry?.longitude || null,
 });
 
 const asSessaoResponse = (entry) => {

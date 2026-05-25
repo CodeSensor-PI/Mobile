@@ -1,13 +1,20 @@
+import { getSession } from './mockDatabase';
+
 export const getApiBaseUrl = () => {
   return process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080';
 };
 
 export async function requestJson(path, options = {}) {
   const { method = 'GET', body, headers = {}, credentials = 'include' } = options;
+  
+  const session = getSession();
+  const authHeaders = session?.token ? { Authorization: `Bearer ${session.token}` } : {};
+
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders,
       ...headers,
     },
     credentials,

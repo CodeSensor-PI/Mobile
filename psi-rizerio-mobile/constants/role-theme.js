@@ -4,16 +4,16 @@ export const CLIENT_DRAWER_COLOR = '#1B66A4';
 
 export function isPsicologoRole(role) {
   const roleId = Number(role?.id);
-  const roleName = String(role?.role || '').toUpperCase();
+  const roleName = String(role?.role || role || '').toUpperCase();
 
-  return roleId === 1 || roleId === 3 || roleName === 'PSICOLOGO' || roleName === 'PSICOLOGO_ASSISTENTE';
+  return roleId === 1 || roleId === 3 || roleName === 'PSICOLOGO' || roleName === 'PSICOLOGO_ASSISTENTE' || roleName === 'PSYCHOLOGIST' || roleName === 'ADMIN';
 }
 
 export function isClienteRole(role) {
   const roleId = Number(role?.id);
-  const roleName = String(role?.role || '').toUpperCase();
+  const roleName = String(role?.role || role || '').toUpperCase();
 
-  return roleId === 2 || roleName === 'CLIENTE';
+  return roleId === 2 || roleName === 'CLIENTE' || roleName === 'USER';
 }
 
 export function getPrimaryColorForRole(role) {

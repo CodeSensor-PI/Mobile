@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,6 +11,7 @@ import { PacienteModal } from './PacienteModal';
 import { getPrimaryColorForRole } from '../../constants/role-theme';
 import { getCurrentSession } from '../../services/authService';
 import { getPacientes, postPaciente, putPaciente } from '../../services/dashboardService';
+import { getCurrentLocation, calculateDistance, formatDistance } from '../../services/locationService';
 
 function normalizePaciente(item) {
   const dados = item?.dadosPaciente || {};
@@ -112,6 +114,11 @@ export function PacientesProfissional() {
   const [selectedPaciente, setSelectedPaciente] = useState(null);
 
   const [alert, setAlert] = useState({ visible: false, title: '', message: '', type: 'success' });
+
+  // -- Geolocalização --
+  const [mapModalVisible, setMapModalVisible] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const [locationLoading, setLocationLoading] = useState(false);
 
   const loadPacientes = async () => {
     setLoading(true);
@@ -245,16 +252,48 @@ export function PacientesProfissional() {
     });
   };
 
+  const openMapModal = async () => {
+    setMapModalVisible(true);
+    setLocationLoading(true);
+    try {
+      const loc = await getCurrentLocation();
+      setUserLocation(loc || { latitude: -23.5505, longitude: -46.6333 }); // fallback São Paulo centro
+    } catch (_e) {
+      setUserLocation({ latitude: -23.5505, longitude: -46.6333 });
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  const patientsWithDistance = useMemo(() => {
+    if (!userLocation) return [];
+    return pacientes
+      .filter((p) => p.latitude != null && p.longitude != null)
+      .map((p) => ({
+        ...p,
+        distance: calculateDistance(userLocation.latitude, userLocation.longitude, p.latitude, p.longitude),
+      }))
+      .sort((a, b) => (a.distance || 999) - (b.distance || 999));
+  }, [pacientes, userLocation]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <MobileSearchAndActionBar
-        query={query}
-        onChangeQuery={setQuery}
-        onPressAction={openCreate}
-        actionLabel="Adicionar Paciente"
-        placeholder="Pesquisar pacientes..."
-        primaryColor={primaryColor}
-      />
+      <View style={styles.searchRow}>
+        <View style={styles.searchBarFlex}>
+          <MobileSearchAndActionBar
+            query={query}
+            onChangeQuery={setQuery}
+            onPressAction={openCreate}
+            actionLabel="Adicionar Paciente"
+            placeholder="Pesquisar pacientes..."
+            primaryColor={primaryColor}
+          />
+        </View>
+        <Pressable style={[styles.mapButton, { backgroundColor: primaryColor }]} onPress={openMapModal}>
+          <Ionicons name="location-outline" size={20} color="#fff" />
+          <Text style={styles.mapButtonText}>Mapa</Text>
+        </Pressable>
+      </View>
 
       {loading ? (
         <View style={styles.centerState}>
@@ -304,6 +343,53 @@ export function PacientesProfissional() {
         type={alert.type}
         onClose={closeAlert}
       />
+
+      {/* Modal de Proximidade Geográfica */}
+      <Modal visible={mapModalVisible} animationType="slide" transparent onRequestClose={() => setMapModalVisible(false)}>
+        <View style={styles.mapModalOverlay}>
+          <View style={styles.mapModalContent}>
+            <View style={styles.mapModalHeader}>
+              <View style={styles.mapModalTitleRow}>
+                <Ionicons name="navigate-outline" size={22} color={primaryColor} />
+                <Text style={styles.mapModalTitle}>Proximidade dos Pacientes</Text>
+              </View>
+              <Pressable onPress={() => setMapModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#64748b" />
+              </Pressable>
+            </View>
+
+            {locationLoading ? (
+              <View style={styles.mapModalLoading}>
+                <ActivityIndicator size="large" color={primaryColor} />
+                <Text style={styles.mapModalLoadingText}>Obtendo localização...</Text>
+              </View>
+            ) : patientsWithDistance.length === 0 ? (
+              <View style={styles.mapModalLoading}>
+                <Ionicons name="location-outline" size={48} color="#cbd5e1" />
+                <Text style={styles.mapModalLoadingText}>Nenhum paciente com coordenadas disponíveis.</Text>
+              </View>
+            ) : (
+              <ScrollView style={styles.mapModalList} contentContainerStyle={{ gap: 10, paddingBottom: 20 }}>
+                {patientsWithDistance.map((p, idx) => (
+                  <View key={p.id} style={styles.proximityCard}>
+                    <View style={[styles.proximityRank, { backgroundColor: idx === 0 ? primaryColor : '#e2e8f0' }]}>
+                      <Text style={[styles.proximityRankText, { color: idx === 0 ? '#fff' : '#475569' }]}>{idx + 1}</Text>
+                    </View>
+                    <View style={styles.proximityInfo}>
+                      <Text style={styles.proximityName}>{p.nomeCompleto}</Text>
+                      <Text style={styles.proximityEmail}>{p.dadosPaciente?.email || p.email || ''}</Text>
+                    </View>
+                    <View style={styles.proximityDistBadge}>
+                      <Ionicons name="navigate" size={14} color={primaryColor} />
+                      <Text style={[styles.proximityDist, { color: primaryColor }]}>{formatDistance(p.distance)}</Text>
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -312,6 +398,28 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#e5e7eb',
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingRight: 10,
+  },
+  searchBarFlex: {
+    flex: 1,
+  },
+  mapButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  mapButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 13,
   },
   listContent: {
     padding: 10,
@@ -340,5 +448,97 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     textDecorationLine: 'underline',
+  },
+  // -- Map Modal --
+  mapModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  mapModalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '75%',
+    paddingTop: 16,
+  },
+  mapModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  mapModalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mapModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  mapModalLoading: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    gap: 12,
+  },
+  mapModalLoadingText: {
+    color: '#64748b',
+    fontSize: 14,
+  },
+  mapModalList: {
+    padding: 16,
+  },
+  proximityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fbff',
+    borderRadius: 16,
+    padding: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  proximityRank: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  proximityRankText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  proximityInfo: {
+    flex: 1,
+  },
+  proximityName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  proximityEmail: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  proximityDistBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#eef2f7',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  proximityDist: {
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

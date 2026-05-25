@@ -250,10 +250,12 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#ffffff',
-    fontSize: 20,
-    lineHeight: 24,
+    fontSize: 17,
+    lineHeight: 22,
     fontWeight: '800',
     flex: 1,
+    flexShrink: 1,
+    flexWrap: 'wrap',
     marginRight: 8,
   },
   pageContent: {

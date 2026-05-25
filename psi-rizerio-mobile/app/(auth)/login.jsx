@@ -59,14 +59,14 @@ export default function LoginScreen() {
       const roleId = Number(role?.id);
       const roleName = String(role?.role || role || '').trim().toUpperCase();
 
-      const nextRoute =
-        roleId === 1 || roleName === 'PSICOLOGO'
-          ? '/(drawer)'
-          : roleId === 3 || roleName === 'PSICOLOGO_ASSISTENTE'
-            ? '/(drawer)'
-            : roleId === 2 || roleName === 'CLIENTE'
-              ? '/(drawer)'
-            : '';
+      let nextRoute = '';
+      if (roleId === 1 || roleName === 'PSICOLOGO' || roleName === 'PSYCHOLOGIST' || roleName === 'ADMIN') {
+        nextRoute = '/(drawer)';
+      } else if (roleId === 3 || roleName === 'PSICOLOGO_ASSISTENTE') {
+        nextRoute = '/(drawer)';
+      } else if (roleId === 2 || roleName === 'CLIENTE' || roleName === 'USER') {
+        nextRoute = session?.usuario?.isFirstAccess ? '/forms' : '/(drawer)';
+      }
 
       if (!nextRoute) {
         openError('Perfil sem acesso ao aplicativo.', 'error');
@@ -160,9 +160,6 @@ export default function LoginScreen() {
                 textStyle={styles.googleText}
               />
 
-              <Pressable onPress={() => router.push('/(auth)/esqueceu-senha')}>
-                <Text style={styles.signUpText}>Nao possui conta ainda? Cadastre-se</Text>
-              </Pressable>
             </View>
 
             <View style={styles.decorativeWrap} pointerEvents="none">

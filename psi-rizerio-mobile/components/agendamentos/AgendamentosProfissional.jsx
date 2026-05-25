@@ -65,6 +65,28 @@ function getWeekRange(offset = 0) {
   return `${format(start)} - ${format(end)}`;
 }
 
+function getMonthLabel(date) {
+  const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  return `${months[date.getMonth()]} de ${date.getFullYear()}`;
+}
+
+function getMonthDaysWithSessions(sessions) {
+  const daysMap = {};
+  sessions.forEach(s => {
+    if (!daysMap[s.data]) {
+      const parts = s.data.split('-');
+      const d = new Date(parts[0], parts[1] - 1, parts[2]);
+      const daysOfWeek = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+      daysMap[s.data] = {
+        dayName: daysOfWeek[d.getDay()],
+        date: `${parts[2]}/${parts[1]}/${parts[0]}`,
+        iso: s.data,
+      };
+    }
+  });
+  return Object.values(daysMap).sort((a, b) => a.iso.localeCompare(b.iso));
+}
+
 function formatDisplayDate(iso) {
   if (!iso) return '';
   const [year, month, day] = iso.split('-');
@@ -80,12 +102,23 @@ function isPastDateTime(isoDate, hour) {
 }
 
 function normalizeSession(session) {
+  let data = session.data;
+  let hora = session.hora;
+
+  if (!data && session.startTime) {
+    const parts = session.startTime.split('T');
+    data = parts[0];
+    hora = parts[1];
+  }
+
   return {
     ...session,
+    data: data,
+    hora: hora,
     statusSessao: session.statusSessao || session.status || 'PENDENTE',
-    patientName: session.fkPaciente?.nome || 'Desconhecido',
-    patientEmail: session.fkPaciente?.email || '',
-    timeSlot: session.hora ? session.hora.slice(0, 5) : '00:00',
+    patientName: session.fkPaciente?.nome || session.patient?.name || 'Desconhecido',
+    patientEmail: session.fkPaciente?.email || session.patient?.email || '',
+    timeSlot: hora ? hora.slice(0, 5) : '00:00',
   };
 }
 
@@ -103,7 +136,9 @@ export default function AgendamentosScreen() {
   const router = useRouter();
   const session = getCurrentSession();
   const primaryColor = getPrimaryColorForRole(session?.usuario?.role || session?.usuario?.fkRoles);
+  const [viewMode, setViewMode] = useState('week'); // 'week' or 'month'
   const [offsetSemana, setOffsetSemana] = useState(0);
+  const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
   const [agendamentos, setAgendamentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedDate, setExpandedDate] = useState('');
@@ -121,6 +156,8 @@ export default function AgendamentosScreen() {
   const [alert, setAlert] = useState({ visible: false, title: '', message: '', type: 'success' });
 
   const weekDays = useMemo(() => getCurrentWeekDays(offsetSemana), [offsetSemana]);
+  const monthDays = useMemo(() => getMonthDaysWithSessions(agendamentos), [agendamentos]);
+  const displayDays = viewMode === 'week' ? weekDays : monthDays;
   const clientes = useMemo(() => listClientes(), []);
 
   useEffect(() => {
@@ -132,16 +169,19 @@ export default function AgendamentosScreen() {
     const load = async () => {
       setLoading(true);
       try {
-        const segunda = weekDays[0]?.iso;
-        const data = await paginacaoGetAgendamentos({ segunda, size: 40 });
-        const list = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.content)
-            ? data.content
-            : [];
+        let data;
+        if (viewMode === 'week') {
+          const segunda = weekDays[0]?.iso;
+          data = await paginacaoGetAgendamentos({ segunda, size: 40 });
+        } else {
+          const mes = currentMonthDate.getMonth() + 1;
+          const ano = currentMonthDate.getFullYear();
+          data = await paginacaoGetAgendamentos({ mes, ano, size: 100 });
+        }
+        const list = Array.isArray(data) ? data : Array.isArray(data?.content) ? data.content : [];
         const normalized = list.map(normalizeSession);
         setAgendamentos(normalized);
-        setExpandedDate(weekDays[0]?.iso || '');
+        setExpandedDate(viewMode === 'week' ? weekDays[0]?.iso || '' : '');
       } catch (error) {
         setAlert({
           visible: true,
@@ -155,7 +195,7 @@ export default function AgendamentosScreen() {
     };
 
     load();
-  }, [offsetSemana, router, weekDays]);
+  }, [offsetSemana, currentMonthDate, viewMode, router, weekDays]);
 
   const sessionsByDate = useMemo(() => {
     return agendamentos.reduce((accumulator, session) => {
@@ -214,14 +254,21 @@ export default function AgendamentosScreen() {
   };
 
   const refresh = async () => {
-    const segunda = weekDays[0]?.iso;
-    const data = await paginacaoGetAgendamentos({ segunda, size: 40 });
-    const list = Array.isArray(data)
-      ? data
-      : Array.isArray(data?.content)
-        ? data.content
-        : [];
-    setAgendamentos(list.map(normalizeSession));
+      try {
+        let data;
+        if (viewMode === 'week') {
+          const segunda = weekDays[0]?.iso;
+          data = await paginacaoGetAgendamentos({ segunda, size: 40 });
+        } else {
+          const mes = currentMonthDate.getMonth() + 1;
+          const ano = currentMonthDate.getFullYear();
+          data = await paginacaoGetAgendamentos({ mes, ano, size: 100 });
+        }
+        const list = Array.isArray(data) ? data : Array.isArray(data?.content) ? data.content : [];
+        setAgendamentos(list.map(normalizeSession));
+      } catch (e) {
+        console.error(e);
+      }
   };
 
   const handleSave = async () => {
@@ -247,18 +294,12 @@ export default function AgendamentosScreen() {
     }
 
     const payload = {
-      fkPaciente: {
-        id: cliente.id,
-        nome: cliente.nome,
-        email: cliente.email,
-        telefone: cliente.telefone,
-        status: cliente.ativo ? 'ATIVO' : 'INATIVO',
-      },
-      data: form.date,
-      hora: `${form.hour.length === 5 ? `${form.hour}:00` : form.hour}`,
-      tipo: form.tipo || 'AVULSO',
-      statusSessao: form.status || 'PENDENTE',
-      anotacao: 'teste',
+      patientId: cliente.id,
+      psychologistId: String(session?.usuario?.id || ''),
+      startTime: `${form.date}T${form.hour.length === 5 ? form.hour + ':00' : form.hour}`,
+      endTime: `${form.date}T${form.hour.length === 5 ? form.hour + ':00' : form.hour}`,
+      status: form.status || 'PENDENTE',
+      clinicalNotes: '',
     };
 
     setSaving(true);
@@ -316,8 +357,46 @@ export default function AgendamentosScreen() {
       </View>
 
       <View style={styles.toolbar}>
+        <View style={styles.viewToggle}>
+          <Pressable style={[styles.toggleBtn, viewMode === 'week' && { backgroundColor: primaryColor }]} onPress={() => setViewMode('week')}>
+            <Text style={[styles.toggleBtnText, viewMode === 'week' && { color: '#fff' }]}>Semana</Text>
+          </Pressable>
+          <Pressable style={[styles.toggleBtn, viewMode === 'month' && { backgroundColor: primaryColor }]} onPress={() => setViewMode('month')}>
+            <Text style={[styles.toggleBtnText, viewMode === 'month' && { color: '#fff' }]}>Mês</Text>
+          </Pressable>
+        </View>
 
-        <Pressable style={[styles.addButton, { backgroundColor: primaryColor }]} onPress={() => openCreate()}>
+        {viewMode === 'week' ? (
+          <View style={[styles.weekNav, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+            <Pressable style={[styles.weekButton, { backgroundColor: primaryColor }]} onPress={() => setOffsetSemana(o => o - 1)}>
+              <Ionicons name="chevron-back" size={16} color="#ffffff" />
+            </Pressable>
+            <Text style={{ fontWeight: '700' }}>{getWeekRange(offsetSemana)}</Text>
+            <Pressable style={[styles.weekButton, { backgroundColor: primaryColor }]} onPress={() => setOffsetSemana(o => o + 1)}>
+              <Ionicons name="chevron-forward" size={16} color="#ffffff" />
+            </Pressable>
+          </View>
+        ) : (
+          <View style={[styles.weekNav, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+            <Pressable style={[styles.weekButton, { backgroundColor: primaryColor }]} onPress={() => {
+              const d = new Date(currentMonthDate);
+              d.setMonth(d.getMonth() - 1);
+              setCurrentMonthDate(d);
+            }}>
+              <Ionicons name="chevron-back" size={16} color="#ffffff" />
+            </Pressable>
+            <Text style={{ fontWeight: '700' }}>{getMonthLabel(currentMonthDate)}</Text>
+            <Pressable style={[styles.weekButton, { backgroundColor: primaryColor }]} onPress={() => {
+              const d = new Date(currentMonthDate);
+              d.setMonth(d.getMonth() + 1);
+              setCurrentMonthDate(d);
+            }}>
+              <Ionicons name="chevron-forward" size={16} color="#ffffff" />
+            </Pressable>
+          </View>
+        )}
+
+        <Pressable style={[styles.addButton, { backgroundColor: primaryColor, width: '100%', marginTop: 8 }]} onPress={() => openCreate()}>
           <Ionicons name="add" size={20} color="#ffffff" />
           <Text style={styles.addButtonText}>Agendar consulta</Text>
         </Pressable>
@@ -329,7 +408,13 @@ export default function AgendamentosScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
-          {weekDays.map((day) => {
+          {displayDays.length === 0 && viewMode === 'month' ? (
+            <View style={styles.centerState}>
+               <Text style={styles.stateText}>Nenhum agendamento neste mês.</Text>
+            </View>
+          ) : null}
+
+          {displayDays.map((day) => {
             const daySessions = sessionsByDate[day.iso] || [];
             const expanded = expandedDate === day.iso;
 
@@ -492,8 +577,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   toolbar: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 16,
     gap: 12,
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    overflow: 'hidden',
+  },
+  toggleBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleBtnText: {
+    fontWeight: '600',
+    color: '#475569',
   },
   weekNav: {
     gap: 8,

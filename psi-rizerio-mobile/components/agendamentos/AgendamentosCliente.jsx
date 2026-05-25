@@ -57,14 +57,18 @@ export function AgendamentosCliente() {
   }, [session?.usuario?.id]);
 
   const cards = useMemo(() => {
-    return items.map((item) => ({
-      id: item.id,
-      date: formatDate(item.data),
-      time: item.hora?.slice(0, 5) || item.hora || '',
-      location: 'Online',
-      status: statusToCard(item.statusSessao || item.status),
-      feedback: feedbackByStatus(item.statusSessao || item.status),
-    }));
+    return items.map((item) => {
+      const datePart = item.data || (item.startTime ? item.startTime.split('T')[0] : '');
+      const timePart = item.hora || (item.startTime ? item.startTime.split('T')[1].slice(0,5) : '');
+      return {
+        id: item.id,
+        date: formatDate(datePart),
+        time: timePart?.slice(0, 5) || timePart || '',
+        location: 'Online',
+        status: statusToCard(item.statusSessao || item.status),
+        feedback: feedbackByStatus(item.statusSessao || item.status),
+      };
+    });
   }, [items]);
 
   return (
