@@ -49,17 +49,22 @@ export default function FeedbackScreen() {
 
   const handleSubmit = async () => {
     setLoading(true);
+    let locationStr = 'Localização não capturada';
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
         const location = await Location.getCurrentPositionAsync({});
         console.log('Location:', location.coords.latitude, location.coords.longitude);
+        locationStr = `Lat: ${location.coords.latitude.toFixed(4)}, Lng: ${location.coords.longitude.toFixed(4)}`;
+        // Simulated sending to psychologist
+        console.log('Enviando dados para o psicólogo com localização:', locationStr);
       }
     } catch (e) {
       console.log('Erro ao capturar localização', e);
     } finally {
       setLoading(false);
       setAlertVisible(true);
+      // Optional: you can store this dynamically if needed, but we will pass it to the alert directly.
     }
   };
 

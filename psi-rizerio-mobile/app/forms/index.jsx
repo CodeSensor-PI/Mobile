@@ -86,12 +86,16 @@ export default function FormularioIndex() {
 
   const handleNext = () => {
     if (canProgress()) {
-      if (step < 4) setStep(step + 1);
-      else alert('Formulário enviado!');
+      if (step < 4) {
+        setStep(step + 1);
+      } else {
+        alert('Formulário enviado!');
+        router.replace('/(drawer)');
+      }
     } else {
-      alert ('Por favor, preencha todos os campos corretamente.')
+      alert('Por favor, preencha todos os campos corretamente.');
     }
-  }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: bgColor }]}>
