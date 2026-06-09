@@ -38,6 +38,19 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O app precisa acessar suas fotos para definir a foto de perfil.",
+          "cameraPermission": "O app precisa acessar a câmera para tirar a foto de perfil."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "O app usa sua localização para calcular a proximidade dos pacientes."
+        }
       ]
     ],
     "experiments": {
