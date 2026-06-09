@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { CustomAlert } from '../CustomAlert';
 
 const WINDOW_WIDTH = Dimensions.get('window').width;
 const MODAL_WIDTH = WINDOW_WIDTH < 330 ? WINDOW_WIDTH - 20 : Math.min(WINDOW_WIDTH * 0.9, 520);
@@ -30,6 +31,7 @@ function Field({ label, value, onChangeText, placeholder, secureTextEntry = fals
 
 export function RegistroModal({ visible, primaryColor = '#1B66A4', saving, onClose, onSave }) {
   const [form, setForm] = useState(INITIAL_FORM);
+  const [alert, setAlert] = useState({ visible: false, message: '' });
 
   // We use simple touchable buttons for role selection to avoid installing Picker if not present
   return (
@@ -88,7 +90,7 @@ export function RegistroModal({ visible, primaryColor = '#1B66A4', saving, onClo
               style={[styles.primaryBtn, { backgroundColor: primaryColor }]}
               onPress={() => {
                 if (!form.nome || !form.email || !form.senha) {
-                  alert('Preencha todos os campos!');
+                  setAlert({ visible: true, message: 'Preencha todos os campos!' });
                   return;
                 }
                 onSave(form);
@@ -107,6 +109,14 @@ export function RegistroModal({ visible, primaryColor = '#1B66A4', saving, onClo
             </Pressable>
           </View>
         </View>
+
+        <CustomAlert
+          visible={alert.visible}
+          title="Atenção"
+          message={alert.message}
+          type="warning"
+          onClose={() => setAlert({ visible: false, message: '' })}
+        />
       </View>
     </Modal>
   );

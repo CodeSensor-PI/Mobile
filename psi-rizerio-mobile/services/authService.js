@@ -1,5 +1,6 @@
 import {
   findClienteByEmail,
+  findLoginRecord,
   findPsicologoByEmail,
   getPendingRecoveryEmail,
   getSession,
@@ -63,6 +64,13 @@ export async function postLogin(login) {
 
     return persistSessionFromUser(user, data?.token);
   } catch (_error) {
+    // Fallback local: permite autenticar com os usuários de teste do mock
+    // quando o backend está indisponível (ex.: app rodando no celular).
+    const record = findLoginRecord(email);
+    if (record && String(record.data.senha) === senha) {
+      return persistSessionFromUser(record.data, 'mock-token-mobile');
+    }
+
     throw buildError('Usuário ou senha inválidos.', 'INVALID_CREDENTIALS');
   }
 }
@@ -98,6 +106,27 @@ export async function validateSession() {
 
 export function getCurrentSession() {
   return getSession();
+}
+
+/**
+ * Atualiza os dados do usuário logado na sessão atual (ex.: após concluir
+ * o formulário de primeiro acesso) e persiste a sessão.
+ */
+export function updateCurrentUser(patch = {}) {
+  const session = getSession();
+  if (!session) {
+    return null;
+  }
+
+  const updated = {
+    ...session,
+    usuario: {
+      ...session.usuario,
+      ...patch,
+    },
+  };
+  setSession(updated);
+  return updated;
 }
 
 export async function solicitarRecuperacaoSenha(email, tipoUsuario = 'psicologo') {

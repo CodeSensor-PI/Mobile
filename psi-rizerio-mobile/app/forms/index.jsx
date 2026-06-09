@@ -21,11 +21,21 @@ import ConclusionStep from '../../components/conclusion';
 
 import { ProgressBar } from '../../components/ui/progress-bar';
 import { Button } from '../../components/ui/button';
+import { PhotoPicker } from '../../components/ui/PhotoPicker';
 import { ThemedText } from '../../components/themed-text';
+import { CustomAlert } from '../../components/CustomAlert';
+import { getCurrentSession, updateCurrentUser } from '../../services/authService';
+import { postPaciente, putPaciente } from '../../services/dashboardService';
+import { getCurrentLocation } from '../../services/locationService';
+
+const onlyDigits = (value) => String(value || '').replace(/\D/g, '');
 
 export default function FormularioIndex() {
   const [step, setStep] = useState(1);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [photo, setPhoto] = useState(null);
+  const [alert, setAlert] = useState({ visible: false, title: '', message: '', type: 'success' });
   const router = useRouter();
 
   const [values, setValues] = useState({
@@ -37,6 +47,78 @@ export default function FormularioIndex() {
 
   const changeValue = (field, value) => {
     setValues((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const showAlert = (title, message, type = 'error') =>
+    setAlert({ visible: true, title, message, type });
+
+  const buildPayload = (location) => {
+    const session = getCurrentSession();
+    const email = session?.usuario?.email || '';
+    const [firstName, ...rest] = values.name.trim().split(/\s+/);
+
+    return {
+      nome: values.name.trim(),
+      email,
+      telefone: onlyDigits(values.phone),
+      cpf: onlyDigits(values.cpf),
+      dataNascimento: values.birthDate,
+      photo: photo || null,
+      latitude: location?.latitude ?? null,
+      longitude: location?.longitude ?? null,
+      role: { id: 2, role: 'CLIENTE' },
+      ativo: true,
+      dadosPaciente: {
+        nome: firstName || values.name.trim(),
+        sobrenome: rest.join(' '),
+        email,
+        diaConsultas: 'Quinta-Feira',
+        horarioConsultas: '16:00',
+        contatoEmergencia: values.emergencyContact.trim(),
+        telefoneEmergencia: onlyDigits(values.emergencyPhone),
+        motivoConsulta: values.reason.trim(),
+      },
+      endereco: {
+        cep: values.cep.trim(),
+        cidade: values.city.trim(),
+        bairro: values.neighborhood.trim(),
+        numero: values.number.trim(),
+        logradouro: values.address.trim(),
+        complemento: values.noComplement ? '' : values.complement.trim(),
+        semComplemento: Boolean(values.noComplement),
+      },
+      planos: { mensal: true, anual: false },
+    };
+  };
+
+  const submitForm = async () => {
+    setSubmitting(true);
+    try {
+      const location = await getCurrentLocation();
+      const payload = buildPayload(location);
+      const session = getCurrentSession();
+      const userId = session?.usuario?.id;
+
+      if (userId) {
+        await putPaciente(userId, payload);
+      } else {
+        await postPaciente(payload);
+      }
+
+      // Marca o primeiro acesso como concluído para não cair mais no formulário.
+      updateCurrentUser({
+        nome: payload.nome,
+        telefone: payload.telefone,
+        cpf: payload.cpf,
+        isFirstAccess: false,
+      });
+
+      showAlert('Cadastro concluído', 'Seus dados foram salvos com sucesso!', 'success');
+    } catch (error) {
+      showAlert('Erro', error?.message || 'Não foi possível concluir o cadastro.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const bgColor = useThemeColor({}, 'background');
@@ -51,49 +133,58 @@ export default function FormularioIndex() {
     else router.back();
   };
 
-  const canProgress = () => {
+  // Retorna uma mensagem de erro específica do campo pendente, ou '' se ok.
+  const validateStep = () => {
     switch (step) {
       case 1:
-        return (
-          values.name.trim().length > 3 &&
-          values.birthDate.length === 10 &&
-          values.cpf.length === 14
-        );
+        if (values.name.trim().length < 4) return 'Informe seu nome completo.';
+        if (values.birthDate.length !== 10) return 'Informe a data de nascimento (dd/mm/aaaa).';
+        if (values.cpf.length !== 14) return 'Informe um CPF válido (000.000.000-00).';
+        return '';
       case 2:
-        const basicLocale =
-          values.cep.length === 9 &&
-          values.address.length > 2 &&
-          values.neighborhood.length > 2 &&
-          values.city.length > 2 &&
-          values.state.length === 2;
-
-        const complementOk = values.noComplement ||
-          (values.complement && values.complement.trim().length > 0);
-
-        return basicLocale && complementOk;
+        if (values.cep.length !== 9) return 'Informe o CEP completo (00000-000).';
+        if (values.address.trim().length < 3) return 'Informe o logradouro (rua/avenida).';
+        if (values.neighborhood.trim().length < 3) return 'Informe o bairro.';
+        if (values.city.trim().length < 3) return 'Informe a cidade.';
+        if (values.state.trim().length !== 2) return 'Informe a UF (2 letras).';
+        if (!values.number.trim()) return 'Informe o número do endereço.';
+        if (!values.noComplement && values.complement.trim().length === 0)
+          return 'Informe o complemento ou marque "Sem complemento".';
+        return '';
       case 3:
-        return (
-          values.phone.length >= 14 &&
-          values.emergencyContact.trim().length > 3 &&
-          values.emergencyPhone.length >= 14
-        );
+        if (values.phone.length < 14) return 'Informe um telefone pessoal válido.';
+        if (values.emergencyContact.trim().length < 4) return 'Informe o nome do contato de emergência.';
+        if (values.emergencyPhone.length < 14) return 'Informe o telefone do contato de emergência.';
+        return '';
       case 4:
-        return values.reason.trim().length > 5;
+        if (values.reason.trim().length < 3) return 'Descreva o motivo da consulta (mínimo 3 caracteres).';
+        return '';
       default:
-        return false;
+        return 'Etapa inválida.';
     }
   };
 
   const handleNext = () => {
-    if (canProgress()) {
-      if (step < 4) {
-        setStep(step + 1);
-      } else {
-        alert('Formulário enviado!');
-        router.replace('/(drawer)');
-      }
+    if (submitting) return;
+
+    const error = validateStep();
+    if (error) {
+      showAlert('Campo obrigatório', error, 'warning');
+      return;
+    }
+
+    if (step < 4) {
+      setStep(step + 1);
     } else {
-      alert('Por favor, preencha todos os campos corretamente.');
+      submitForm();
+    }
+  };
+
+  const handleAlertClose = () => {
+    const wasSuccess = alert.type === 'success';
+    setAlert((prev) => ({ ...prev, visible: false }));
+    if (wasSuccess) {
+      router.replace('/(drawer)');
     }
   };
 
@@ -124,6 +215,13 @@ export default function FormularioIndex() {
             inactiveColor={inactiveBar}
           />
 
+          {step === 1 && (
+            <View style={styles.photoSection}>
+              <PhotoPicker value={photo} onChange={setPhoto} primaryColor={activeBar} size={104} />
+              <ThemedText style={styles.photoLabel}>Foto de perfil (opcional)</ThemedText>
+            </View>
+          )}
+
           <View style={styles.stepContainer}>
             {step === 1 && <PersonalDataStep values={values} onChange={changeValue} />}
             {step === 2 && <LocaleStep values={values} onChange={changeValue} />}
@@ -133,7 +231,7 @@ export default function FormularioIndex() {
 
           <View style={styles.actions}>
             <Button
-              title={step < 4 ? 'Prosseguir' : 'Finalizar'}
+              title={step < 4 ? 'Prosseguir' : submitting ? 'Salvando...' : 'Finalizar'}
               onPress={handleNext}
             />
             <Button
@@ -174,12 +272,22 @@ export default function FormularioIndex() {
           </View>
         </View>
       </Modal>
+
+      <CustomAlert
+        visible={alert.visible}
+        title={alert.title}
+        message={alert.message}
+        type={alert.type}
+        onClose={handleAlertClose}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  photoSection: { alignItems: 'center', marginBottom: 20, gap: 8 },
+  photoLabel: { fontSize: 13, opacity: 0.7 },
   customHeader: {
     height: 60,
     flexDirection: 'row',

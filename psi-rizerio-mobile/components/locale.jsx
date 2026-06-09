@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { View, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from './themed-text';
 import { FormInput } from './ui/input';
+import { CustomAlert } from './CustomAlert';
 import { useThemeColor } from '../hooks/use-theme-color';
 import { maskCEP } from '../utils/masks';
 import { getAddressByCep } from '../services/viaCEP';
@@ -10,6 +11,7 @@ import { getAddressByCep } from '../services/viaCEP';
 export default function LocaleStep({ values, onChange }) {
   const activeColor = useThemeColor({}, 'purpleStrong');
   const [loading, setLoading] = useState(false);
+  const [alert, setAlert] = useState({ visible: false, message: '' });
 
   useEffect(() => {
     const buscarCep = async () => {
@@ -26,7 +28,7 @@ export default function LocaleStep({ values, onChange }) {
           onChange('state', data.uf);
 
         } catch (error) {
-          Alert.alert('Erro', error.message || 'Não foi possível buscar o CEP.');
+          setAlert({ visible: true, message: error.message || 'Não foi possível buscar o CEP.' });
         } finally {
           setLoading(false);
         }
@@ -127,6 +129,14 @@ export default function LocaleStep({ values, onChange }) {
           Sem complemento
         </ThemedText>
       </Pressable>
+
+      <CustomAlert
+        visible={alert.visible}
+        title="Erro"
+        message={alert.message}
+        type="error"
+        onClose={() => setAlert({ visible: false, message: '' })}
+      />
     </View>
   );
 }

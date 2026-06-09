@@ -1,15 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View, Modal } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
 
 import { CustomAlert } from '../../components/CustomAlert';
 import { AuthButton } from '../../components/ui/AuthButton';
 import { AuthTextInput } from '../../components/ui/AuthTextInput';
 import { PasswordStrengthIndicator } from '../../components/ui/PasswordStrengthIndicator';
 import { RegistroModal } from '../../components/admin/RegistroModal';
+import { PhotoPicker } from '../../components/ui/PhotoPicker';
 import { getCurrentSession, alterarSenha } from '../../services/authService';
 import { getPsicologoPorId, putPsicologo, getAllUsers, updateUserRole, postPsicologo, postPaciente } from '../../services/dashboardService';
 
@@ -141,16 +141,13 @@ export default function AdministracaoScreen() {
 
   const toggleGeneralEdit = () => {
     if (isEditingGeneral) {
-      Alert.alert('Cancelar edição?', 'Tem certeza que deseja cancelar a edição?', [
-        { text: 'Não', style: 'cancel' },
-        {
-          text: 'Sim',
-          style: 'destructive',
-          onPress: () => {
-            setIsEditingGeneral(false);
-          },
-        },
-      ]);
+      setAlert({
+        visible: true,
+        title: 'Cancelar edição?',
+        message: 'Tem certeza que deseja cancelar a edição?',
+        type: 'warning',
+        confirmAction: () => setIsEditingGeneral(false),
+      });
       return;
     }
 
@@ -159,16 +156,13 @@ export default function AdministracaoScreen() {
 
   const togglePasswordEdit = () => {
     if (isEditingPassword) {
-      Alert.alert('Cancelar edição da senha?', 'Tem certeza que deseja cancelar a edição da senha?', [
-        { text: 'Não', style: 'cancel' },
-        {
-          text: 'Sim',
-          style: 'destructive',
-          onPress: () => {
-            setIsEditingPassword(false);
-          },
-        },
-      ]);
+      setAlert({
+        visible: true,
+        title: 'Cancelar edição da senha?',
+        message: 'Tem certeza que deseja cancelar a edição da senha?',
+        type: 'warning',
+        confirmAction: () => setIsEditingPassword(false),
+      });
       return;
     }
 
@@ -197,30 +191,6 @@ export default function AdministracaoScreen() {
       openError(error.message || 'Erro ao salvar dados.');
     } finally {
       setSavingGeneral(false);
-    }
-  };
-
-  const handlePickImage = async () => {
-    if (!isEditingGeneral) {
-      openError('Clique em "Editar" para alterar sua foto de perfil.');
-      return;
-    }
-    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permissionResult.granted) {
-      openError('Permissão para acessar a câmera é necessária!');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-      base64: true,
-    });
-
-    if (!result.canceled && result.assets?.[0]?.base64) {
-      setPhoto(`data:image/jpeg;base64,${result.assets[0].base64}`);
     }
   };
 
@@ -318,7 +288,15 @@ export default function AdministracaoScreen() {
   };
 
   const handleCloseAlert = () => {
-    setAlert((prev) => ({ ...prev, visible: false }));
+    setAlert((prev) => ({ ...prev, visible: false, confirmAction: null }));
+  };
+
+  const handleConfirmAlert = () => {
+    const action = alert.confirmAction;
+    setAlert((prev) => ({ ...prev, visible: false, confirmAction: null }));
+    if (typeof action === 'function') {
+      action();
+    }
   };
 
   return (
@@ -343,22 +321,15 @@ export default function AdministracaoScreen() {
             </View>
 
             <View style={styles.photoContainer}>
-              <Pressable onPress={handlePickImage} style={styles.photoButton}>
-                {photo ? (
-                  <Image source={{ uri: photo }} style={styles.profilePhoto} />
-                ) : (
-                  <View style={styles.photoPlaceholder}>
-                    <Ionicons name="person" size={40} color="#cbd5e1" />
-                  </View>
-                )}
-                {isEditingGeneral && (
-                  <View style={styles.cameraIconBadge}>
-                    <Ionicons name="camera" size={16} color="#fff" />
-                  </View>
-                )}
-              </Pressable>
+              <PhotoPicker
+                value={photo}
+                onChange={setPhoto}
+                onError={openError}
+                editable={isEditingGeneral}
+                size={96}
+              />
               <Text style={styles.photoHelper}>
-                {isEditingGeneral ? 'Toque para tirar uma foto' : 'Foto de Perfil'}
+                {isEditingGeneral ? 'Toque para alterar a foto' : 'Foto de Perfil'}
               </Text>
             </View>
 
@@ -507,7 +478,16 @@ export default function AdministracaoScreen() {
         </View>
       </Modal>
 
-      <CustomAlert visible={alert.visible} title={alert.title} message={alert.message} type={alert.type} onClose={handleCloseAlert} />
+      <CustomAlert
+        visible={alert.visible}
+        title={alert.title}
+        message={alert.message}
+        type={alert.type}
+        primaryLabel={alert.confirmAction ? 'Sim' : 'OK'}
+        secondaryLabel="Não"
+        onClose={alert.confirmAction ? handleConfirmAlert : handleCloseAlert}
+        onSecondaryAction={alert.confirmAction ? handleCloseAlert : undefined}
+      />
     </SafeAreaView>
   );
 }

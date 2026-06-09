@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -323,31 +323,34 @@ export default function AgendamentosScreen() {
   };
 
   const handleCancelSession = (session) => {
-    Alert.alert(
-      'Cancelar agendamento?',
-      'Tem certeza que deseja cancelar esta sessão?',
-      [
-        { text: 'Não', style: 'cancel' },
-        {
-          text: 'Sim',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await cancelAgendamento(session.id);
-              openSuccess('Agendamento cancelado com sucesso!');
-              await refresh();
-              setModalVisible(false);
-            } catch (error) {
-              openError(error.message || 'Erro ao cancelar agendamento.');
-            }
-          },
-        },
-      ]
-    );
+    setAlert({
+      visible: true,
+      title: 'Cancelar agendamento?',
+      message: 'Tem certeza que deseja cancelar esta sessão?',
+      type: 'warning',
+      confirmAction: async () => {
+        try {
+          await cancelAgendamento(session.id);
+          openSuccess('Agendamento cancelado com sucesso!');
+          await refresh();
+          setModalVisible(false);
+        } catch (error) {
+          openError(error.message || 'Erro ao cancelar agendamento.');
+        }
+      },
+    });
   };
 
   const handleCloseAlert = () => {
-    setAlert((prev) => ({ ...prev, visible: false }));
+    setAlert((prev) => ({ ...prev, visible: false, confirmAction: null }));
+  };
+
+  const handleConfirmAlert = () => {
+    const action = alert.confirmAction;
+    setAlert((prev) => ({ ...prev, visible: false, confirmAction: null }));
+    if (typeof action === 'function') {
+      action();
+    }
   };
 
   return (
@@ -551,7 +554,16 @@ export default function AgendamentosScreen() {
         </View>
       </Modal>
 
-      <CustomAlert visible={alert.visible} title={alert.title} message={alert.message} type={alert.type} onClose={handleCloseAlert} />
+      <CustomAlert
+        visible={alert.visible}
+        title={alert.title}
+        message={alert.message}
+        type={alert.type}
+        primaryLabel={alert.confirmAction ? 'Sim' : 'OK'}
+        secondaryLabel="Não"
+        onClose={alert.confirmAction ? handleConfirmAlert : handleCloseAlert}
+        onSecondaryAction={alert.confirmAction ? handleCloseAlert : undefined}
+      />
     </SafeAreaView>
   );
 }
