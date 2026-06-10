@@ -74,7 +74,7 @@ export function AgendamentosCliente() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Meus Agendamentos</Text>
+        <Text style={styles.title}>Agendamentos</Text>
 
         {cards.length === 0 ? (
           <View style={styles.emptyWrap}>
@@ -116,7 +116,7 @@ export function AgendamentosCliente() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#f2f3f7',
+    backgroundColor: '#151718',
   },
   content: {
     padding: 16,
@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#20262f',
+    color: '#ffffff',
     marginBottom: 16,
   },
   emptyWrap: {
