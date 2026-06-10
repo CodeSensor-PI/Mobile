@@ -1,6 +1,6 @@
 export const ROLE_PRIMARY_COLOR = '#1B66A4';
 export const DEFAULT_PRIMARY_COLOR = '#1d4ed8';
-export const CLIENT_DRAWER_COLOR = '#1B66A4';
+export const CLIENT_DRAWER_COLOR = '#7836dd';
 
 export function isPsicologoRole(role) {
   const roleId = Number(role?.id);
