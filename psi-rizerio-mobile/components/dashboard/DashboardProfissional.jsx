@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import { CustomAlert } from '../CustomAlert';
+import { SimpleMarkdown } from '../ui/SimpleMarkdown';
 import { ThemedView } from '../themed-view';
 import { getCurrentSession } from '../../services/authService';
 import {
@@ -38,37 +39,6 @@ function formatCurrency(value) {
   return `R$ ${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-function renderMarkdownText(text, expanded) {
-  if (!text) return null;
-  const rawLines = text.split('\n').filter(Boolean);
-  const lines = expanded ? rawLines : rawLines.slice(0, 3);
-  
-  return (
-    <>
-      {lines.map((line, i) => {
-        if (line.startsWith('### ')) {
-          return <Text key={i} style={styles.insightHeading}>{line.replace('### ', '')}</Text>;
-        } else if (line.startsWith('## ')) {
-          return <Text key={i} style={styles.insightHeadingLg}>{line.replace('## ', '')}</Text>;
-        }
-        
-        const parts = line.split(/(\*\*.*?\*\*)/g);
-        return (
-          <Text key={i} style={styles.insightText}>
-            {parts.map((part, j) => {
-              if (part.startsWith('**') && part.endsWith('**')) {
-                return <Text key={j} style={{ fontWeight: 'bold' }}>{part.slice(2, -2)}</Text>;
-              }
-              return part;
-            })}
-          </Text>
-        );
-      })}
-      {!expanded && rawLines.length > 3 && <Text style={styles.insightText}>...</Text>}
-    </>
-  );
-}
-
 // ==========================================
 // Insight Card (Expandable)
 // ==========================================
@@ -76,7 +46,7 @@ function InsightCard({ title, icon, iconColor, content, loading }) {
   const [expanded, setExpanded] = useState(false);
 
   const lines = String(content || '').split('\n').filter(Boolean);
-  const preview = lines.slice(0, 3).join('\n');
+  const preview = lines.slice(0, 4).join('\n');
 
   return (
     <View style={[styles.insightCard, { borderLeftColor: iconColor }]}>
@@ -101,7 +71,8 @@ function InsightCard({ title, icon, iconColor, content, loading }) {
 
       {!loading && (
         <View style={styles.insightBody}>
-          {renderMarkdownText(content, expanded)}
+          <SimpleMarkdown content={expanded ? content : preview} color="#1f2937" />
+          {!expanded && lines.length > 4 ? <Text style={styles.insightText}>...</Text> : null}
         </View>
       )}
     </View>

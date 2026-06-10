@@ -9,7 +9,8 @@ export const Colors = {
     textSecondary: '#666666',
     background: '#FAF7F2', // Creme do protótipo
     tint: tintColorLight,
-    
+    primary: tintColorLight, // alias usado em botões/realces
+
     // Configurações de Inputs
     inputLabel: '#000000',
     inputBackground: '#F1E9F5', // Lilás clarinho do protótipo
@@ -27,13 +28,16 @@ export const Colors = {
     secondary: '#D1C4E9',
     cardBackground: '#FFFFFF',
     border: '#E2D5ED',
+    statusScheduled: '#643BA1',
+    statusCompleted: '#16a34a',
   },
   dark: {
     text: '#FFFFFF',
     textSecondary: '#AAAAAA',
     background: '#151718',
     tint: tintColorDark,
-    
+    primary: tintColorDark, // alias usado em botões/realces
+
     // Configurações de Inputs
     inputLabel: '#FFFFFF',
     inputBackground: '#2A2A2A', // Cinza escuro para o modo dark
@@ -51,6 +55,8 @@ export const Colors = {
     secondary: '#333333',
     cardBackground: '#1E1E1E',
     border: '#333333',
+    statusScheduled: '#9B7CF2',
+    statusCompleted: '#4CAF50',
   },
 };
 export const Fonts = Platform.select({

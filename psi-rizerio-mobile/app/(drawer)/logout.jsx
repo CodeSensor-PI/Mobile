@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { ActivityIndicator, StyleSheet, View, useColorScheme } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useColorScheme } from './../../hooks/use-color-scheme';
 import { ThemedText } from './../../components/themed-text';
 import { ThemedView } from './../../components/themed-view';
 import { Colors } from './../../constants/theme';

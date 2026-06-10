@@ -4,12 +4,13 @@ import { useRouter } from 'expo-router';
 
 import { AppointmentCard } from '../AppointmentCard';
 import { CustomAlert } from '../CustomAlert';
+import { ChangePasswordModal } from '../ui/ChangePasswordModal';
 import { ThemedText } from '../themed-text';
 import { ThemedView } from '../themed-view';
 import { Colors } from '../../constants/theme';
 import { useColorScheme } from '../../hooks/use-color-scheme';
 import { getCurrentSession } from '../../services/authService';
-import { getAgendamentosPorPaciente, getMeuPaciente } from '../../services/dashboardService';
+import { getAgendamentosPorPaciente, getFeedbacksPaciente, getMeuPaciente } from '../../services/dashboardService';
 
 function isoFromSession(item) {
   if (item?.startTime) return String(item.startTime).split('T')[0];
@@ -21,13 +22,6 @@ function statusToCard(status) {
   const normalized = String(status || '').toUpperCase();
   if (normalized === 'AGENDADA' || normalized === 'PENDENTE' || normalized === 'CONFIRMADA') return 'Agendado';
   return 'Concluido';
-}
-
-function feedbackByStatus(status) {
-  const normalized = String(status || '').toUpperCase();
-  if (normalized === 'CONCLUIDA') return 'Pendente';
-  if (normalized === 'CANCELADA') return 'Finalizado';
-  return undefined;
 }
 
 export function DashboardCliente() {
@@ -42,8 +36,10 @@ export function DashboardCliente() {
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
 
   const [sessions, setSessions] = useState([]);
+  const [feedbackIds, setFeedbackIds] = useState(new Set());
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertMsg, setAlertMsg] = useState('');
+  const [pwdVisible, setPwdVisible] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -55,9 +51,16 @@ export function DashboardCliente() {
           patientId = paciente?.id;
         }
         if (!patientId) return;
-        const data = await getAgendamentosPorPaciente(patientId);
+        const [data, fbs] = await Promise.all([
+          getAgendamentosPorPaciente(patientId),
+          getFeedbacksPaciente(patientId).catch(() => []),
+        ]);
         const list = Array.isArray(data) ? data : Array.isArray(data?.content) ? data.content : [];
-        if (mounted) setSessions(list);
+        const ids = new Set((Array.isArray(fbs) ? fbs : []).map((f) => String(f.sessaoId)).filter(Boolean));
+        if (mounted) {
+          setSessions(list);
+          setFeedbackIds(ids);
+        }
       } catch (_e) {
         if (mounted) setSessions([]);
       }
@@ -143,22 +146,34 @@ export function DashboardCliente() {
     return hasAgendada ? 'futuro' : 'passado';
   };
 
+  const selectedIso = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`;
+
   const cards = useMemo(() => {
-    return sessions.map((item) => {
+    // Mostra apenas os agendamentos do dia selecionado no calendário.
+    return sessions
+      .filter((item) => isoFromSession(item) === selectedIso)
+      .map((item) => {
       const iso = isoFromSession(item);
       const [y, m, d] = iso.split('-');
       const timePart = item.startTime ? String(item.startTime).split('T')[1]?.slice(0, 5) : item.hora?.slice(0, 5);
       const status = item.status || item.statusSessao;
+      const st = String(status || '').toUpperCase();
+      let feedback;
+      if (st === 'CONCLUIDA') {
+        feedback = feedbackIds.has(String(item.id)) ? 'Finalizado' : 'Pendente';
+      } else if (st === 'CANCELADA') {
+        feedback = 'Finalizado';
+      }
       return {
         id: item.id,
         date: iso ? `${d}/${m}/${y}` : '',
         time: timePart || '',
         location: 'Online',
         status: statusToCard(status),
-        feedback: feedbackByStatus(status),
+        feedback,
       };
     });
-  }, [sessions]);
+  }, [sessions, selectedIso, feedbackIds]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -289,8 +304,11 @@ export function DashboardCliente() {
           </View>
         </View>
 
+        <ThemedText style={styles.dayHeading}>
+          Agendamentos de {String(selectedDay).padStart(2, '0')}/{String(currentMonth + 1).padStart(2, '0')}
+        </ThemedText>
         {cards.length === 0 ? (
-          <ThemedText style={styles.emptyText}>Você ainda não possui agendamentos.</ThemedText>
+          <ThemedText style={styles.emptyText}>Nenhum agendamento neste dia.</ThemedText>
         ) : (
           cards.map((appointment) => (
             <AppointmentCard
@@ -301,10 +319,21 @@ export function DashboardCliente() {
               status={appointment.status}
               feedback={appointment.feedback}
               onAction={handleCancelAction}
-              onFeedbackAction={() => router.push('/(drawer)/feedback')}
+              onFeedbackAction={() => router.push({ pathname: '/(drawer)/feedback', params: { sessaoId: String(appointment.id) } })}
             />
           ))
         )}
+
+        <ChangePasswordModal
+          visible={pwdVisible}
+          accent={colors.primary}
+          onClose={() => setPwdVisible(false)}
+          onSuccess={() => {
+            setPwdVisible(false);
+            setAlertMsg('Sua senha foi alterada com sucesso!');
+            setAlertVisible(true);
+          }}
+        />
 
         <CustomAlert
           visible={alertVisible}
@@ -425,5 +454,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#888',
     marginTop: 10,
+  },
+  dayHeading: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 8,
   },
 });

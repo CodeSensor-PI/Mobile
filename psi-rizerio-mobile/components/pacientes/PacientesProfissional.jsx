@@ -225,12 +225,14 @@ export function PacientesProfissional() {
     router.push('/(drawer)/agendamentos');
   };
 
-  const handleOpenPatientDashboard = () => {
-    setAlert({
-      visible: true,
-      title: 'Em breve',
-      message: 'A navegação para o dashboard do paciente será integrada à API real.',
-      type: 'warning',
+  const handleOpenPatientDashboard = (paciente) => {
+    if (!paciente?.id) {
+      setAlert({ visible: true, title: 'Atenção', message: 'Paciente sem cadastro completo.', type: 'warning' });
+      return;
+    }
+    router.push({
+      pathname: '/paciente-relatorio',
+      params: { patientId: String(paciente.id), nome: paciente.name || paciente.nome || 'Paciente' },
     });
   };
 
@@ -302,7 +304,7 @@ export function PacientesProfissional() {
               primaryColor={primaryColor}
               onEdit={() => openEdit(paciente)}
               onSchedule={handleSchedule}
-              onDashboard={handleOpenPatientDashboard}
+              onDashboard={() => handleOpenPatientDashboard(paciente)}
             />
           ))}
         </ScrollView>

@@ -12,7 +12,7 @@ export function PsicologoListCard({ psicologo, onPressEdit, primaryColor = '#1B6
     <View style={styles.card}>
       <View style={styles.infoRow}>
         <Image
-          source={require('../../assets/images/profile.png')}
+          source={psicologo.photo ? { uri: psicologo.photo } : require('../../assets/images/profile.png')}
           style={styles.avatar}
           accessibilityLabel={`Avatar de ${safeText(psicologo.nome, 'psicólogo')}`}
         />

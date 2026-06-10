@@ -111,8 +111,8 @@ export default function AdministracaoScreen() {
           throw new Error('Usuário não encontrado.');
         }
 
-        setNome(data.nome || '');
-        setEmail(data.email || '');
+        setNome(data.nome || data.name || session.usuario?.nome || session.usuario?.name || '');
+        setEmail(data.email || session.usuario?.email || '');
         setTelefone(formatTelefone(data.telefone || ''));
         setCrp(formatCrp(data.crp || ''));
         if (data.photo) {

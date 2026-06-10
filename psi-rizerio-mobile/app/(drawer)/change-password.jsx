@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, TextInput, useColorScheme } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { useColorScheme } from './../../hooks/use-color-scheme';
 import { ThemedText } from './../../components/themed-text';
 import { ThemedView } from './../../components/themed-view';
 import { Colors } from './../../constants/theme';

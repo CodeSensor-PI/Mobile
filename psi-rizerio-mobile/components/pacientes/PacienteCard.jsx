@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 function getInitials(nomeCompleto) {
@@ -10,16 +10,21 @@ function getInitials(nomeCompleto) {
 }
 
 export function PacienteCard({ paciente, primaryColor = '#1B66A4', onEdit, onSchedule, onDashboard }) {
-  const nomeCompleto = String(paciente?.nomeCompleto || paciente?.nome || 'Paciente').trim();
-  const telefone = paciente?.telefone || paciente?.dadosPaciente?.telefoneEmergencia || '--';
-  const emergencia = paciente?.dadosPaciente?.contatoEmergencia || paciente?.dadosPaciente?.telefoneEmergencia || '--';
+  const nomeCompleto = String(paciente?.nomeCompleto || paciente?.nome || paciente?.name || 'Paciente').trim();
+  const telefone = paciente?.telefone || paciente?.phone || paciente?.dadosPaciente?.telefoneEmergencia || '--';
+  const emergencia = paciente?.emergencyContact || paciente?.dadosPaciente?.contatoEmergencia || paciente?.dadosPaciente?.telefoneEmergencia || '--';
+  const foto = paciente?.photo || null;
 
   return (
     <View style={styles.card}>
       <View style={styles.rowTop}>
-        <View style={[styles.avatar, { borderColor: primaryColor }]} accessibilityRole="image" accessibilityLabel={`Avatar de ${nomeCompleto}`}>
-          <Text style={[styles.avatarText, { color: primaryColor }]}>{getInitials(nomeCompleto)}</Text>
-        </View>
+        {foto ? (
+          <Image source={{ uri: foto }} style={[styles.avatar, { borderColor: primaryColor }]} accessibilityLabel={`Foto de ${nomeCompleto}`} />
+        ) : (
+          <View style={[styles.avatar, { borderColor: primaryColor }]} accessibilityRole="image" accessibilityLabel={`Avatar de ${nomeCompleto}`}>
+            <Text style={[styles.avatarText, { color: primaryColor }]}>{getInitials(nomeCompleto)}</Text>
+          </View>
+        )}
 
         <View style={styles.infoWrap}>
           <Text style={styles.infoLine}>

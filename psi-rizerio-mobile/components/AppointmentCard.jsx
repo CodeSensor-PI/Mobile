@@ -50,7 +50,7 @@ export function AppointmentCard({
         onPress={status === 'Agendado' ? onAction : onFeedbackAction}
       >
         <ThemedText style={[styles.buttonText, { color: colors.primary }]}>
-          {status === 'Agendado' ? 'Cancelar Agendamento' : (feedback === 'Pendente' ? 'Enviar Feedback' : (feedback === 'Em andamento' ? 'Continuar Feedback' : 'Revisar Feedback'))}
+          {status === 'Agendado' ? 'Cancelar Agendamento' : (feedback === 'Pendente' ? 'Enviar Feedback' : 'Feedback concluído')}
         </ThemedText>
       </TouchableOpacity>
     </View>

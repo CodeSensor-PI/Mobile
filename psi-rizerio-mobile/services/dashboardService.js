@@ -92,6 +92,31 @@ export async function postFeedback(feedback) {
   });
 }
 
+/**
+ * Lista os feedbacks de um paciente.
+ */
+export async function getFeedbacksPaciente(patientId) {
+  return requestJson(`/api/v1/feedbacks/patient/${patientId}`, { credentials: 'include' });
+}
+
+/**
+ * Gera um relatório clínico com IA (Gemini) a partir dos feedbacks do paciente.
+ */
+export async function gerarRelatorioPaciente(patientId) {
+  return requestJson(`/api/v1/patients/${patientId}/reports/generate`, {
+    method: 'POST',
+    body: {},
+    credentials: 'include',
+  });
+}
+
+/**
+ * Lista os relatórios de IA já gerados para o paciente.
+ */
+export async function getRelatoriosPaciente(patientId) {
+  return requestJson(`/api/v1/patients/${patientId}/reports`, { credentials: 'include' });
+}
+
 export async function getPsicologos() {
   return withFallback(
     async () => {

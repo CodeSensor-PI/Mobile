@@ -1,18 +1,25 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
-import { ThemedText } from '../../components/themed-text';
-import { useColorScheme } from '../../hooks/use-color-scheme';
-import { ThemedView } from '../../components/themed-view';
-import { Colors } from '../../constants/theme';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+
 import { IconSymbol } from '../../components/ui/icon-symbol';
 import { CustomAlert } from '../../components/CustomAlert';
 import { PhotoPicker } from '../../components/ui/PhotoPicker';
-import { useRouter } from 'expo-router';
+import { ChangePasswordModal } from '../../components/ui/ChangePasswordModal';
+import { getDrawerColorForRole } from '../../constants/role-theme';
 import { getCurrentSession, updateCurrentUser } from '../../services/authService';
 import { atualizarMeuPaciente, getMeuPaciente } from '../../services/dashboardService';
 import { maskDate, maskCPF } from '../../utils/masks';
 
-// Converte yyyy-mm-dd (backend) <-> dd/mm/aaaa (exibição)
+// Paleta clara fixa (todo o app usa tema claro).
+const C = {
+  bg: '#f2f3f7',
+  card: '#ffffff',
+  border: '#e2e8f0',
+  label: '#0f172a',
+  value: '#475569',
+  placeholder: '#94a3b8',
+};
+
 function isoToBr(iso) {
   if (!iso) return '';
   const [y, m, d] = String(iso).split('-');
@@ -27,10 +34,8 @@ function brToIso(br) {
 }
 
 export default function SettingsScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
-  const router = useRouter();
   const session = getCurrentSession();
+  const accent = getDrawerColorForRole(session?.usuario?.role || session?.usuario?.fkRoles);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -38,36 +43,7 @@ export default function SettingsScreen() {
   const [patient, setPatient] = useState(null);
   const [form, setForm] = useState(null);
   const [alert, setAlert] = useState({ visible: false, title: '', message: '' });
-
-  useEffect(() => {
-    let mounted = true;
-    const roleName = String(session?.usuario?.role?.role || session?.usuario?.role || '').toUpperCase();
-    if (roleName !== 'USER' && roleName !== 'CLIENTE') {
-      // Tela de perfil é específica do paciente; demais perfis não carregam dados.
-      setLoading(false);
-      return () => {
-        mounted = false;
-      };
-    }
-    (async () => {
-      try {
-        const userId = session?.usuario?.id;
-        const data = await getMeuPaciente(userId);
-        if (!mounted) return;
-        setPatient(data);
-        setForm(toForm(data));
-      } catch (_e) {
-        if (mounted) {
-          setAlert({ visible: true, title: 'Erro', message: 'Não foi possível carregar seu perfil.' });
-        }
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [session?.usuario?.id]);
+  const [pwdVisible, setPwdVisible] = useState(false);
 
   const toForm = (d) => ({
     name: d?.name || '',
@@ -82,13 +58,34 @@ export default function SettingsScreen() {
     photo: d?.photo || null,
   });
 
+  useEffect(() => {
+    let mounted = true;
+    const roleName = String(session?.usuario?.role?.role || session?.usuario?.role || '').toUpperCase();
+    if (roleName !== 'USER' && roleName !== 'CLIENTE') {
+      setLoading(false);
+      return () => { mounted = false; };
+    }
+    (async () => {
+      try {
+        const data = await getMeuPaciente(session?.usuario?.id);
+        if (!mounted) return;
+        setPatient(data);
+        setForm(toForm(data));
+      } catch (_e) {
+        if (mounted) setAlert({ visible: true, title: 'Erro', message: 'Não foi possível carregar seu perfil.' });
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [session?.usuario?.id]);
+
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
   const handleSave = async () => {
     if (!patient?.id) return;
     setSaving(true);
     try {
-      // Envia o objeto completo (mescla com o original) para não apagar campos.
       const payload = {
         ...patient,
         name: form.name,
@@ -117,49 +114,62 @@ export default function SettingsScreen() {
 
   if (loading) {
     return (
-      <ThemedView style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </ThemedView>
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color={accent} />
+      </View>
     );
   }
 
   if (!form) {
     return (
-      <ThemedView style={[styles.container, styles.center]}>
-        <ThemedText style={{ textAlign: 'center', paddingHorizontal: 24 }}>
+      <View style={[styles.container, styles.center]}>
+        <Text style={{ textAlign: 'center', paddingHorizontal: 24, color: C.value }}>
           Esta tela exibe as informações pessoais do paciente.
-        </ThemedText>
-      </ThemedView>
+        </Text>
+      </View>
     );
   }
 
-  const InfoRow = ({ label, field, mask, keyboardType }) => (
-    <View style={styles.infoRowContainer}>
-      <ThemedText style={styles.rowLabel}>{label}:</ThemedText>
+  const infoRow = (label, field, mask, keyboardType) => (
+    <View key={field} style={styles.row}>
+      <Text style={styles.label}>{label}</Text>
       {editing ? (
         <TextInput
-          style={[styles.input, { color: colors.text, borderColor: colors.primary }]}
+          style={styles.input}
           value={form[field]}
           onChangeText={(val) => update(field, mask ? mask(val) : val)}
           placeholder={label}
-          placeholderTextColor="#999"
+          placeholderTextColor={C.placeholder}
           keyboardType={keyboardType}
         />
       ) : (
-        <ThemedText style={[styles.rowValue, { color: colors.textSecondary }]}>
-          {form[field] || '—'}
-        </ThemedText>
+        <Text style={styles.value}>{form[field] || '—'}</Text>
       )}
     </View>
   );
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.sectionHeader}>
-          <ThemedText style={styles.sectionTitle}>Informações pessoais</ThemedText>
+        {/* Cabeçalho do perfil */}
+        <View style={styles.profileCard}>
+          <PhotoPicker
+            value={form.photo}
+            editable={editing}
+            size={92}
+            shape="circle"
+            primaryColor={accent}
+            onChange={(uri) => update('photo', uri)}
+            onError={(reason) => setAlert({ visible: true, title: 'Foto', message: reason })}
+          />
+          <Text style={styles.profileName}>{form.name || 'Paciente'}</Text>
+          <Text style={styles.profileEmail}>{form.email}</Text>
+          {editing ? (
+            <Text style={styles.photoHint}>Toque na foto para usar a câmera ou a galeria</Text>
+          ) : null}
+
           <TouchableOpacity
-            style={[styles.editButton, { backgroundColor: editing ? '#4CAF50' : colors.primary }]}
+            style={[styles.editButton, { backgroundColor: editing ? '#16a34a' : accent }]}
             onPress={() => (editing ? handleSave() : setEditing(true))}
             disabled={saving}
           >
@@ -167,53 +177,49 @@ export default function SettingsScreen() {
               <ActivityIndicator size="small" color="#FFF" />
             ) : (
               <>
-                <IconSymbol name={editing ? 'checkmark' : 'pencil'} size={14} color="#FFF" />
-                <ThemedText style={styles.editButtonText}>{editing ? 'Salvar' : 'Editar'}</ThemedText>
+                <IconSymbol name={editing ? 'checkmark' : 'pencil'} size={15} color="#FFF" />
+                <Text style={styles.editButtonText}>{editing ? 'Salvar alterações' : 'Editar perfil'}</Text>
               </>
             )}
           </TouchableOpacity>
         </View>
 
-        <View style={styles.profileRow}>
-          <PhotoPicker
-            value={form.photo}
-            editable={editing}
-            size={100}
-            shape="rounded"
-            primaryColor={colors.primary}
-            onChange={(uri) => update('photo', uri)}
-            onError={(reason) => setAlert({ visible: true, title: 'Foto', message: reason })}
-          />
-          <View style={styles.photoHint}>
-            <ThemedText style={[styles.rowValue, { color: colors.textSecondary }]}>
-              {editing
-                ? 'Toque na foto para usar a câmera ou escolher da galeria.'
-                : 'Ative "Editar" para alterar sua foto.'}
-            </ThemedText>
-          </View>
+        {/* Dados pessoais */}
+        <Text style={styles.sectionTitle}>Dados pessoais</Text>
+        <View style={styles.card}>
+          {infoRow('Nome', 'name')}
+          {infoRow('Email', 'email', undefined, 'email-address')}
+          {infoRow('Data de Nascimento', 'birthDate', maskDate, 'numeric')}
+          {infoRow('CPF', 'cpf', maskCPF, 'numeric')}
+          {infoRow('Telefone', 'phone', undefined, 'phone-pad')}
+          {infoRow('Cidade', 'city')}
+          {infoRow('Estado', 'state')}
         </View>
 
-        <InfoRow label="Nome" field="name" />
-        <InfoRow label="Email" field="email" keyboardType="email-address" />
-        <InfoRow label="Data de Nascimento" field="birthDate" mask={maskDate} keyboardType="numeric" />
-        <InfoRow label="CPF" field="cpf" mask={maskCPF} keyboardType="numeric" />
-        <InfoRow label="Telefone" field="phone" keyboardType="phone-pad" />
-        <InfoRow label="Cidade" field="city" />
-        <InfoRow label="Estado" field="state" />
-
-        <ThemedText style={[styles.sectionTitle, { marginTop: 20, marginBottom: 15 }]}>
-          Contato de emergência
-        </ThemedText>
-        <InfoRow label="Nome" field="emergencyContact" />
-        <InfoRow label="Telefone de emergência" field="emergencyPhone" keyboardType="phone-pad" />
+        {/* Contato de emergência */}
+        <Text style={styles.sectionTitle}>Contato de emergência</Text>
+        <View style={styles.card}>
+          {infoRow('Nome', 'emergencyContact')}
+          {infoRow('Telefone de emergência', 'emergencyPhone', undefined, 'phone-pad')}
+        </View>
 
         <TouchableOpacity
-          style={[styles.passwordButton, { backgroundColor: colors.primary }]}
-          onPress={() => router.push('/change-password')}
+          style={[styles.passwordButton, { borderColor: accent }]}
+          onPress={() => setPwdVisible(true)}
         >
-          <IconSymbol name="lock" size={18} color="#FFF" />
-          <ThemedText style={styles.passwordButtonText}>Alterar Senha</ThemedText>
+          <IconSymbol name="lock" size={18} color={accent} />
+          <Text style={[styles.passwordButtonText, { color: accent }]}>Alterar Senha</Text>
         </TouchableOpacity>
+
+        <ChangePasswordModal
+          visible={pwdVisible}
+          accent={accent}
+          onClose={() => setPwdVisible(false)}
+          onSuccess={() => {
+            setPwdVisible(false);
+            setAlert({ visible: true, title: 'Sucesso', message: 'Sua senha foi alterada com sucesso!' });
+          }}
+        />
 
         <CustomAlert
           visible={alert.visible}
@@ -222,44 +228,85 @@ export default function SettingsScreen() {
           onClose={() => setAlert((p) => ({ ...p, visible: false }))}
         />
       </ScrollView>
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: C.bg },
   center: { justifyContent: 'center', alignItems: 'center' },
-  scrollContent: { padding: 20, paddingBottom: 40 },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  scrollContent: { padding: 16, paddingBottom: 40 },
+
+  profileCard: {
+    backgroundColor: C.card,
+    borderRadius: 18,
+    padding: 20,
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 22,
+    borderWidth: 1,
+    borderColor: C.border,
   },
-  sectionTitle: { fontSize: 22, fontWeight: 'bold' },
+  profileName: { fontSize: 20, fontWeight: '800', color: C.label, marginTop: 12 },
+  profileEmail: { fontSize: 14, color: C.value, marginTop: 2 },
+  photoHint: { fontSize: 12, color: C.placeholder, marginTop: 8, textAlign: 'center' },
   editButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    minWidth: 80,
     justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 22,
+    marginTop: 16,
   },
-  editButtonText: { color: '#FFF', fontWeight: 'bold', marginLeft: 6, fontSize: 12 },
-  profileRow: { flexDirection: 'row', marginBottom: 20, alignItems: 'center' },
-  photoHint: { marginLeft: 20, flex: 1 },
-  infoRowContainer: { marginBottom: 10 },
-  rowLabel: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
-  rowValue: { fontWeight: '300', fontSize: 16 },
-  input: { borderWidth: 1, borderRadius: 8, padding: 8, fontSize: 16, marginTop: 2 },
+  editButtonText: { color: '#FFF', fontWeight: '700', fontSize: 14 },
+
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: C.value,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  card: {
+    backgroundColor: C.card,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    marginBottom: 22,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  row: {
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: C.border,
+  },
+  label: { fontSize: 13, fontWeight: '700', color: C.label, marginBottom: 3 },
+  value: { fontSize: 16, color: C.value },
+  input: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 16,
+    color: C.label,
+    backgroundColor: '#f8fafc',
+    marginTop: 2,
+  },
   passwordButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 15,
+    gap: 10,
+    paddingVertical: 14,
     borderRadius: 12,
-    marginTop: 30,
+    borderWidth: 1.5,
+    backgroundColor: C.card,
+    marginTop: 4,
   },
-  passwordButtonText: { color: '#FFF', fontWeight: 'bold', marginLeft: 10, fontSize: 16 },
+  passwordButtonText: { fontWeight: '800', fontSize: 16 },
 });

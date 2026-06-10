@@ -1,13 +1,28 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, useColorScheme, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import { useColorScheme } from './../../hooks/use-color-scheme';
 import * as Location from 'expo-location';
 import { ThemedText } from './../../components/themed-text';
 import { ThemedView } from './../../components/themed-view';
 import { Colors } from './../../constants/theme';
 import { IconSymbol } from './../../components/ui/icon-symbol';
 import { CustomAlert } from './../../components/CustomAlert';
+import { useLocalSearchParams } from 'expo-router';
 import { getCurrentSession } from './../../services/authService';
-import { getMeuPaciente, postFeedback } from './../../services/dashboardService';
+import { getAgendamentosPorPaciente, getFeedbacksPaciente, getMeuPaciente, postFeedback } from './../../services/dashboardService';
+
+const WEEKDAYS = ['Domingo', 'Segunda-Feira', 'Terça-Feira', 'Quarta-Feira', 'Quinta-Feira', 'Sexta-Feira', 'Sábado'];
+
+function describeSession(sessao) {
+  const iso = sessao?.startTime ? String(sessao.startTime) : '';
+  const datePart = iso.split('T')[0];
+  const timePart = iso.split('T')[1]?.slice(0, 5) || '';
+  if (!datePart) return { label: '', time: timePart };
+  const [y, m, d] = datePart.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const weekday = WEEKDAYS[date.getDay()];
+  return { label: `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')} - ${weekday}`, time: timePart };
+}
 const sentiments = [
   { name: 'Muito bem', icon: 'sentiment.very.satisfied' },
   { name: 'Bem', icon: 'sentiment.satisfied' },
@@ -25,6 +40,7 @@ const climates = [
 export default function FeedbackScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
+  const { sessaoId: targetSessaoId } = useLocalSearchParams();
   
   const [selectedFeeling, setSelectedFeeling] = useState(null);
   const [progress, setProgress] = useState(null);
@@ -35,6 +51,85 @@ export default function FeedbackScreen() {
   const [alertMessage, setAlertMessage] = useState('');
   const [alertTitle, setAlertTitle] = useState('Sucesso!');
   const [loading, setLoading] = useState(false);
+
+  const [initializing, setInitializing] = useState(true);
+  const [patientId, setPatientId] = useState(null);
+  const [pendingSessions, setPendingSessions] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [alreadySent, setAlreadySent] = useState(false);
+  const [existingFeedback, setExistingFeedback] = useState(null);
+
+  const resetForm = () => {
+    setSelectedFeeling(null);
+    setProgress(null);
+    setClarity(null);
+    setMotivation(null);
+    setNote('');
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    // Recarrega ao mudar a sessão alvo (a tela do drawer não remonta sozinha).
+    setInitializing(true);
+    setCurrentIndex(0);
+    setAlreadySent(false);
+    setExistingFeedback(null);
+    resetForm();
+    (async () => {
+      try {
+        const session = getCurrentSession();
+        let pid = session?.usuario?.patientId;
+        if (!pid) {
+          const paciente = await getMeuPaciente(session?.usuario?.id);
+          pid = paciente?.id;
+        }
+        if (!pid) return;
+        if (mounted) setPatientId(pid);
+
+        const [sessoes, feedbacks] = await Promise.all([
+          getAgendamentosPorPaciente(pid).catch(() => []),
+          getFeedbacksPaciente(pid).catch(() => []),
+        ]);
+        const list = Array.isArray(sessoes) ? sessoes : (sessoes?.content || []);
+        const comFeedback = new Set((Array.isArray(feedbacks) ? feedbacks : []).map((f) => String(f.sessaoId)));
+
+        // Se veio de um agendamento específico, mira exatamente naquela sessão.
+        if (targetSessaoId) {
+          const alvo = list.find((s) => String(s.id) === String(targetSessaoId));
+          const isConcluida = alvo && String(alvo.status || alvo.statusSessao || '').toUpperCase() === 'CONCLUIDA';
+          const temFeedback = comFeedback.has(String(targetSessaoId));
+
+          // Sessão concluída e ainda sem feedback => abre o formulário.
+          if (isConcluida && !temFeedback) {
+            if (mounted) setPendingSessions([alvo]);
+            return;
+          }
+
+          // Caso contrário (já tem feedback) => tela "Feedback concluído" com o conteúdo.
+          const fb = (Array.isArray(feedbacks) ? feedbacks : []).find((f) => String(f.sessaoId) === String(targetSessaoId));
+          if (mounted) {
+            setExistingFeedback(fb || null);
+            setAlreadySent(true);
+          }
+          return;
+        }
+
+        // Só sessões CONCLUÍDAS e que ainda não têm feedback enviado.
+        const pendentes = list
+          .filter((s) => String(s.status || s.statusSessao || '').toUpperCase() === 'CONCLUIDA')
+          .filter((s) => !comFeedback.has(String(s.id)))
+          .sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)));
+        if (mounted) setPendingSessions(pendentes);
+      } finally {
+        if (mounted) setInitializing(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [targetSessaoId]);
+
+  const currentSession = pendingSessions[currentIndex];
 
   const getIconStyle = (index, selectedValue) => {
     if (selectedValue === null) return [];
@@ -68,6 +163,14 @@ export default function FeedbackScreen() {
   };
 
   const handleSubmit = async () => {
+    // Campos obrigatórios: sentimento, progresso, clareza e motivação. (Nota é opcional.)
+    if (selectedFeeling === null || progress === null || clarity === null || motivation === null) {
+      setAlertTitle('Campos obrigatórios');
+      setAlertMessage('Responda todas as perguntas antes de enviar (a nota é opcional).');
+      setAlertVisible(true);
+      return;
+    }
+
     setLoading(true);
     let latitude = null;
     let longitude = null;
@@ -85,15 +188,9 @@ export default function FeedbackScreen() {
     }
 
     try {
-      const session = getCurrentSession();
-      let patientId = session?.usuario?.patientId;
-      if (!patientId) {
-        const paciente = await getMeuPaciente(session?.usuario?.id);
-        patientId = paciente?.id;
-      }
-
       await postFeedback({
         patientId,
+        sessaoId: currentSession?.id,
         content: buildContent(),
         moodScore: moodScoreFromFeeling(selectedFeeling),
         latitude,
@@ -101,11 +198,12 @@ export default function FeedbackScreen() {
         locationLabel,
       });
 
+      const restantes = pendingSessions.length - currentIndex - 1;
       setAlertTitle('Sucesso!');
       setAlertMessage(
-        latitude != null
-          ? 'Seu feedback foi enviado com sucesso. Sua localização também foi registrada para gerar melhores insights de IA!'
-          : 'Seu feedback foi enviado com sucesso.'
+        restantes > 0
+          ? `Feedback enviado! Você ainda tem ${restantes} sessão(ões) aguardando feedback.`
+          : 'Feedback enviado! Você respondeu todas as sessões pendentes.'
       );
     } catch (_e) {
       setAlertTitle('Erro');
@@ -116,11 +214,91 @@ export default function FeedbackScreen() {
     }
   };
 
+  // Ao fechar o alerta de sucesso, avança para a próxima sessão pendente.
+  const handleAlertClose = () => {
+    setAlertVisible(false);
+    if (alertTitle === 'Sucesso!') {
+      resetForm();
+      setCurrentIndex((idx) => idx + 1);
+    }
+  };
+
+  if (initializing) {
+    return (
+      <ThemedView style={[styles.container, styles.centerState]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </ThemedView>
+    );
+  }
+
+  // Feedback dessa sessão já foi enviado — mostra o conteúdo (somente leitura).
+  if (alreadySent) {
+    const partes = String(existingFeedback?.content || '')
+      .split('|')
+      .map((p) => p.trim())
+      .filter(Boolean);
+    const quando = existingFeedback?.createdAt
+      ? new Date(existingFeedback.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : null;
+
+    return (
+      <ThemedView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={{ alignItems: 'center', marginBottom: 16 }}>
+            <IconSymbol name="checkmark.circle.fill" size={48} color="#4CAF50" />
+            <ThemedText style={styles.emptyTitle}>Feedback concluído</ThemedText>
+            <ThemedText style={styles.emptyText}>
+              Você já respondeu o feedback desta sessão. Veja abaixo o que foi enviado.
+            </ThemedText>
+          </View>
+
+          <View style={[styles.reviewCard, { borderColor: colors.primary }]}>
+            {quando ? (
+              <ThemedText style={[styles.reviewMeta, { color: colors.primary }]}>Enviado em {quando}</ThemedText>
+            ) : null}
+            {existingFeedback?.moodScore != null ? (
+              <ThemedText style={styles.reviewLine}>
+                <ThemedText style={styles.reviewLabel}>Humor: </ThemedText>{existingFeedback.moodScore}/5
+              </ThemedText>
+            ) : null}
+            {partes.length > 0 ? (
+              partes.map((p, i) => (
+                <ThemedText key={i} style={styles.reviewLine}>• {p}</ThemedText>
+              ))
+            ) : (
+              <ThemedText style={styles.reviewLine}>{existingFeedback?.content || 'Sem detalhes registrados.'}</ThemedText>
+            )}
+            {existingFeedback?.locationLabel ? (
+              <ThemedText style={[styles.reviewLine, { marginTop: 6 }]}>
+                <ThemedText style={styles.reviewLabel}>Local: </ThemedText>{existingFeedback.locationLabel}
+              </ThemedText>
+            ) : null}
+          </View>
+        </ScrollView>
+      </ThemedView>
+    );
+  }
+
+  // Sem sessões pendentes: ou nunca houve sessão concluída, ou todas já têm feedback.
+  if (!currentSession) {
+    return (
+      <ThemedView style={[styles.container, styles.centerState]}>
+        <IconSymbol name="checkmark.circle.fill" size={56} color="#4CAF50" />
+        <ThemedText style={styles.emptyTitle}>Nenhum feedback pendente</ThemedText>
+        <ThemedText style={styles.emptyText}>
+          Você não possui sessões concluídas aguardando feedback no momento.
+        </ThemedText>
+      </ThemedView>
+    );
+  }
+
+  const info = describeSession(currentSession);
+
   return (
     <ThemedView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <ThemedText style={styles.headerTitle}>
-          Referente a sessão do dia <ThemedText style={{ color: colors.primary, fontWeight: 'bold' }}>10/02 - Terça-Feira</ThemedText> às <ThemedText style={{ color: colors.primary, fontWeight: 'bold' }}>11:30</ThemedText> :
+          Referente a sessão do dia <ThemedText style={{ color: colors.primary, fontWeight: 'bold' }}>{info.label}</ThemedText>{info.time ? <> às <ThemedText style={{ color: colors.primary, fontWeight: 'bold' }}>{info.time}</ThemedText></> : null} :
         </ThemedText>
 
         <View style={styles.section}>
@@ -250,7 +428,7 @@ export default function FeedbackScreen() {
           visible={alertVisible}
           title={alertTitle}
           message={alertMessage}
-          onClose={() => setAlertVisible(false)}
+          onClose={handleAlertClose}
         />
 
       </ScrollView>
@@ -266,6 +444,40 @@ function getBarColor(level) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  centerState: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 30,
+    gap: 10,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 6,
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: 'center',
+    opacity: 0.7,
+  },
+  reviewCard: {
+    borderWidth: 1.5,
+    borderRadius: 16,
+    padding: 16,
+    gap: 6,
+  },
+  reviewMeta: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  reviewLine: {
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  reviewLabel: {
+    fontWeight: 'bold',
   },
   scrollContent: {
     padding: 20,
