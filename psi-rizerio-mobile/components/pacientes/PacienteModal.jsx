@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { PhotoPicker } from '../ui/PhotoPicker';
+
 const WINDOW_WIDTH = Dimensions.get('window').width;
 const WINDOW_HEIGHT = Dimensions.get('window').height;
 // Responsiva: 90% em mobile, máximo 520px em tablets. Em <330px usa 100%-20px padding
@@ -82,6 +84,16 @@ export function PacienteModal({ visible, mode = 'edit', initialData, primaryColo
           </View>
 
           <ScrollView contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled">
+            <View style={styles.photoRow}>
+              <PhotoPicker
+                value={form.photo}
+                size={84}
+                shape="rounded"
+                primaryColor={primaryColor}
+                onChange={(uri) => setForm((prev) => ({ ...prev, photo: uri }))}
+              />
+              <Text style={styles.photoHint}>Toque na foto para usar a câmera ou a galeria.</Text>
+            </View>
             <Field
               label="Nome"
               value={form.nome}
@@ -262,6 +274,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingBottom: 10,
     gap: 6,
+  },
+  photoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 6,
+  },
+  photoHint: {
+    flex: 1,
+    fontSize: 12,
+    color: '#6b7280',
   },
   fieldWrap: {
     gap: 3,

@@ -22,16 +22,74 @@ import {
 } from './mockDatabase';
 
 /**
- * Executa a chamada à API real e, caso ela falhe (backend offline,
- * sem rede, rodando no celular, etc.), usa o banco de dados mock local
- * para que o app continue funcional e populado com dados de teste.
+ * Executa a chamada à API real. O app usa exclusivamente o backend real
+ * (sem banco mock). O segundo parâmetro é ignorado e mantido apenas para
+ * compatibilidade com as chamadas existentes.
  */
-async function withFallback(remote, fallback) {
-  try {
-    return await remote();
-  } catch (_error) {
-    return fallback();
-  }
+async function withFallback(remote, _fallback) {
+  return await remote();
+}
+
+// O backend real usa `name`/`phone`; a UI espera `nome`/`telefone` e a forma
+// aninhada `dadosPaciente`. Normalizamos aqui para os dois mundos conviverem.
+export function normalizePaciente(p) {
+  if (!p || typeof p !== 'object') return p;
+  return {
+    ...p,
+    nome: p.nome || p.name,
+    nomeCompleto: p.nomeCompleto || p.name || p.nome,
+    name: p.name || p.nome,
+    telefone: p.telefone || p.phone,
+    dadosPaciente: {
+      ...(p.dadosPaciente || {}),
+      contatoEmergencia: p.dadosPaciente?.contatoEmergencia || p.emergencyContact,
+      telefoneEmergencia: p.dadosPaciente?.telefoneEmergencia || p.emergencyPhone,
+    },
+  };
+}
+
+export function normalizePsicologo(u) {
+  if (!u || typeof u !== 'object') return u;
+  return {
+    ...u,
+    nome: u.nome || u.name,
+    name: u.name || u.nome,
+    telefone: u.telefone || u.phone,
+  };
+}
+
+// =====================================================
+// Paciente (perfil do próprio usuário) e Feedback
+// =====================================================
+
+/**
+ * Busca o perfil de paciente vinculado ao usuário logado.
+ * Retorna o registro de /clientes (com UUID real) usado para edição.
+ */
+export async function getMeuPaciente(userId) {
+  return requestJson(`/clientes/user/${userId}`, { credentials: 'include' });
+}
+
+/**
+ * Atualiza o perfil de paciente (dados pessoais + foto em base64).
+ */
+export async function atualizarMeuPaciente(patientId, dados) {
+  return requestJson(`/clientes/${patientId}`, {
+    method: 'PUT',
+    body: dados,
+    credentials: 'include',
+  });
+}
+
+/**
+ * Envia um feedback (com localização opcional) para o backend.
+ */
+export async function postFeedback(feedback) {
+  return requestJson('/api/v1/feedbacks', {
+    method: 'POST',
+    body: feedback,
+    credentials: 'include',
+  });
 }
 
 export async function getPsicologos() {
@@ -42,7 +100,7 @@ export async function getPsicologos() {
       if (!Array.isArray(list) || list.length === 0) {
         throw new Error('empty');
       }
-      return list;
+      return list.map(normalizePsicologo);
     },
     () => listPsicologos(),
   );
@@ -50,7 +108,7 @@ export async function getPsicologos() {
 
 export async function getPsicologoPorId(id) {
   return withFallback(
-    () => requestJson(`/psicologos/${id}`, { credentials: 'include' }),
+    async () => normalizePsicologo(await requestJson(`/psicologos/${id}`, { credentials: 'include' })),
     () => findPsicologoResponseById(id),
   );
 }
@@ -166,7 +224,7 @@ export async function getPacientes() {
       if (!Array.isArray(list) || list.length === 0) {
         throw new Error('empty');
       }
-      return list;
+      return list.map(normalizePaciente);
     },
     () => listClientesResponse(),
   );
@@ -192,7 +250,7 @@ export async function listClientes() {
 
 export async function findClienteById(id) {
   return withFallback(
-    () => requestJson(`/clientes/${id}`, { credentials: 'include' }),
+    async () => normalizePaciente(await requestJson(`/clientes/${id}`, { credentials: 'include' })),
     () => findClienteResponseById(id),
   );
 }

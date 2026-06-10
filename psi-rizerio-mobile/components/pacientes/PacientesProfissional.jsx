@@ -52,24 +52,28 @@ function normalizePaciente(item) {
 }
 
 function toModalPayload(paciente) {
+  const fullName = String(paciente?.name || paciente?.nome || '').trim();
+  const [nome, ...rest] = fullName.split(/\s+/);
   return {
     id: paciente?.id || null,
-    nome: paciente?.dadosPaciente?.nome || '',
-    sobrenome: paciente?.dadosPaciente?.sobrenome || '',
-    email: paciente?.dadosPaciente?.email || paciente?.email || '',
-    diaConsultas: paciente?.dadosPaciente?.diaConsultas || 'Quinta-Feira',
-    horarioConsultas: paciente?.dadosPaciente?.horarioConsultas || '16:00',
-    contatoEmergencia: paciente?.dadosPaciente?.contatoEmergencia || '',
-    telefoneEmergencia: paciente?.dadosPaciente?.telefoneEmergencia || '',
-    cep: paciente?.endereco?.cep || '',
-    cidade: paciente?.endereco?.cidade || '',
-    bairro: paciente?.endereco?.bairro || '',
-    numero: paciente?.endereco?.numero || '',
-    logradouro: paciente?.endereco?.logradouro || '',
-    complemento: paciente?.endereco?.complemento || '',
-    semComplemento: Boolean(paciente?.endereco?.semComplemento),
-    planoMensal: paciente?.planos?.mensal !== false,
-    planoAnual: Boolean(paciente?.planos?.anual),
+    nome: nome || '',
+    sobrenome: rest.join(' '),
+    email: paciente?.email || '',
+    telefone: paciente?.phone || paciente?.telefone || '',
+    diaConsultas: 'Quinta-Feira',
+    horarioConsultas: '16:00',
+    contatoEmergencia: paciente?.emergencyContact || paciente?.dadosPaciente?.contatoEmergencia || '',
+    telefoneEmergencia: paciente?.emergencyPhone || paciente?.dadosPaciente?.telefoneEmergencia || '',
+    cep: paciente?.cep || '',
+    cidade: paciente?.city || '',
+    bairro: paciente?.neighborhood || '',
+    numero: '',
+    logradouro: paciente?.address || '',
+    complemento: '',
+    semComplemento: false,
+    planoMensal: true,
+    planoAnual: false,
+    photo: paciente?.photo || null,
   };
 }
 
@@ -78,20 +82,8 @@ function validateModalForm(values) {
     return 'Nome é obrigatório.';
   }
 
-  if (!values.sobrenome || values.sobrenome.trim().length < 2) {
-    return 'Sobrenome é obrigatório.';
-  }
-
   if (!values.email || !/^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$/.test(values.email)) {
     return 'Informe um e-mail válido.';
-  }
-
-  if (!values.diaConsultas || !values.horarioConsultas) {
-    return 'Dia e horário de consultas são obrigatórios.';
-  }
-
-  if (!values.planoMensal && !values.planoAnual) {
-    return 'Selecione pelo menos um plano.';
   }
 
   return '';
@@ -188,36 +180,26 @@ export function PacientesProfissional() {
       return;
     }
 
+    const enderecoCompleto = [values.logradouro.trim(), values.numero.trim()].filter(Boolean).join(', ');
+    // Payload plano no formato do PatientRequestDTO; em edição, mescla com o
+    // registro atual para não apagar campos não exibidos no modal.
     const payload = {
-      nome: `${values.nome.trim()} ${values.sobrenome.trim()}`.trim(),
+      ...(modalMode === 'edit' ? selectedPaciente : {}),
+      name: `${values.nome.trim()} ${values.sobrenome.trim()}`.trim(),
       email: values.email.trim(),
-      telefone: values.telefoneEmergencia || '',
-      psicologoId: Number(session?.usuario?.id) || 1,
-      role: { id: 2, role: 'CLIENTE' },
-      ativo: true,
-      dadosPaciente: {
-        nome: values.nome.trim(),
-        sobrenome: values.sobrenome.trim(),
-        email: values.email.trim(),
-        diaConsultas: values.diaConsultas.trim(),
-        horarioConsultas: values.horarioConsultas.trim(),
-        contatoEmergencia: values.contatoEmergencia.trim(),
-        telefoneEmergencia: values.telefoneEmergencia.trim(),
-      },
-      endereco: {
-        cep: values.cep.trim(),
-        cidade: values.cidade.trim(),
-        bairro: values.bairro.trim(),
-        numero: values.numero.trim(),
-        logradouro: values.logradouro.trim(),
-        complemento: values.semComplemento ? '' : values.complemento.trim(),
-        semComplemento: Boolean(values.semComplemento),
-      },
-      planos: {
-        mensal: Boolean(values.planoMensal),
-        anual: Boolean(values.planoAnual),
-      },
+      phone: values.telefone?.trim() || selectedPaciente?.phone || values.telefoneEmergencia?.trim() || '00000000000',
+      emergencyContact: values.contatoEmergencia.trim() || null,
+      emergencyPhone: values.telefoneEmergencia.trim() || null,
+      cep: values.cep.trim() || null,
+      city: values.cidade.trim() || null,
+      neighborhood: values.bairro.trim() || null,
+      address: enderecoCompleto || null,
+      photo: values.photo ?? selectedPaciente?.photo ?? null,
     };
+    // Remove aliases de UI que não existem no DTO do backend.
+    delete payload.nome;
+    delete payload.telefone;
+    delete payload.dadosPaciente;
 
     setSaving(true);
 

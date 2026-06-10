@@ -6,6 +6,8 @@ import { ThemedView } from './../../components/themed-view';
 import { Colors } from './../../constants/theme';
 import { IconSymbol } from './../../components/ui/icon-symbol';
 import { CustomAlert } from './../../components/CustomAlert';
+import { getCurrentSession } from './../../services/authService';
+import { getMeuPaciente, postFeedback } from './../../services/dashboardService';
 const sentiments = [
   { name: 'Muito bem', icon: 'sentiment.very.satisfied' },
   { name: 'Bem', icon: 'sentiment.satisfied' },
@@ -30,6 +32,8 @@ export default function FeedbackScreen() {
   const [motivation, setMotivation] = useState(null);
   const [note, setNote] = useState('');
   const [alertVisible, setAlertVisible] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertTitle, setAlertTitle] = useState('Sucesso!');
   const [loading, setLoading] = useState(false);
 
   const getIconStyle = (index, selectedValue) => {
@@ -47,24 +51,68 @@ export default function FeedbackScreen() {
     return sentimentColors[index];
   };
 
+  const moodScoreFromFeeling = (feeling) => {
+    // sentiments: 0 = Muito bem ... 4 = Muito mal  -> moodScore 5..1
+    if (feeling === null) return 3;
+    return 5 - feeling;
+  };
+
+  const buildContent = () => {
+    const parts = [];
+    if (selectedFeeling !== null) parts.push(`Sentimento: ${sentiments[selectedFeeling].name}`);
+    if (progress !== null) parts.push(`Progresso (1-5): ${progress}`);
+    if (clarity !== null) parts.push(`Clareza: ${climates[clarity].name}`);
+    if (motivation !== null) parts.push(`Motivação: ${['Sim', 'Mais ou menos', 'Não'][motivation]}`);
+    if (note.trim()) parts.push(`Nota: ${note.trim()}`);
+    return parts.join(' | ') || 'Feedback enviado sem detalhes adicionais.';
+  };
+
   const handleSubmit = async () => {
     setLoading(true);
-    let locationStr = 'Localização não capturada';
+    let latitude = null;
+    let longitude = null;
+    let locationLabel = null;
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
         const location = await Location.getCurrentPositionAsync({});
-        console.log('Location:', location.coords.latitude, location.coords.longitude);
-        locationStr = `Lat: ${location.coords.latitude.toFixed(4)}, Lng: ${location.coords.longitude.toFixed(4)}`;
-        // Simulated sending to psychologist
-        console.log('Enviando dados para o psicólogo com localização:', locationStr);
+        latitude = location.coords.latitude;
+        longitude = location.coords.longitude;
+        locationLabel = `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`;
       }
     } catch (e) {
       console.log('Erro ao capturar localização', e);
+    }
+
+    try {
+      const session = getCurrentSession();
+      let patientId = session?.usuario?.patientId;
+      if (!patientId) {
+        const paciente = await getMeuPaciente(session?.usuario?.id);
+        patientId = paciente?.id;
+      }
+
+      await postFeedback({
+        patientId,
+        content: buildContent(),
+        moodScore: moodScoreFromFeeling(selectedFeeling),
+        latitude,
+        longitude,
+        locationLabel,
+      });
+
+      setAlertTitle('Sucesso!');
+      setAlertMessage(
+        latitude != null
+          ? 'Seu feedback foi enviado com sucesso. Sua localização também foi registrada para gerar melhores insights de IA!'
+          : 'Seu feedback foi enviado com sucesso.'
+      );
+    } catch (_e) {
+      setAlertTitle('Erro');
+      setAlertMessage('Não foi possível enviar seu feedback. Tente novamente.');
     } finally {
       setLoading(false);
       setAlertVisible(true);
-      // Optional: you can store this dynamically if needed, but we will pass it to the alert directly.
     }
   };
 
@@ -198,10 +246,10 @@ export default function FeedbackScreen() {
            {loading ? <ActivityIndicator color="#FFF" /> : <ThemedText style={styles.sendButtonText}>Enviar</ThemedText>}
         </TouchableOpacity>
 
-        <CustomAlert 
+        <CustomAlert
           visible={alertVisible}
-          title="Sucesso!"
-          message="Seu feedback foi enviado com sucesso. Analisamos também sua localização para gerar melhores insights de IA!"
+          title={alertTitle}
+          message={alertMessage}
           onClose={() => setAlertVisible(false)}
         />
 

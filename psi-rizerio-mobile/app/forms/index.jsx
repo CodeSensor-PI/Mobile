@@ -25,7 +25,7 @@ import { PhotoPicker } from '../../components/ui/PhotoPicker';
 import { ThemedText } from '../../components/themed-text';
 import { CustomAlert } from '../../components/CustomAlert';
 import { getCurrentSession, updateCurrentUser } from '../../services/authService';
-import { postPaciente, putPaciente } from '../../services/dashboardService';
+import { atualizarMeuPaciente, getMeuPaciente } from '../../services/dashboardService';
 import { getCurrentLocation } from '../../services/locationService';
 
 const onlyDigits = (value) => String(value || '').replace(/\D/g, '');
@@ -52,42 +52,38 @@ export default function FormularioIndex() {
   const showAlert = (title, message, type = 'error') =>
     setAlert({ visible: true, title, message, type });
 
-  const buildPayload = (location) => {
+  // dd/mm/aaaa -> yyyy-mm-dd (formato esperado pelo backend)
+  const brToIso = (br) => {
+    if (!br) return null;
+    const [d, m, y] = String(br).split('/');
+    if (!d || !m || !y || y.length < 4) return null;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  };
+
+  // Payload no formato plano esperado pelo PatientRequestDTO do backend real.
+  const buildPayload = (location, base = {}) => {
     const session = getCurrentSession();
-    const email = session?.usuario?.email || '';
-    const [firstName, ...rest] = values.name.trim().split(/\s+/);
+    const email = session?.usuario?.email || base.email || '';
+    const addressParts = [values.address.trim(), values.number.trim()].filter(Boolean);
 
     return {
-      nome: values.name.trim(),
+      ...base,
+      name: values.name.trim(),
       email,
-      telefone: onlyDigits(values.phone),
-      cpf: onlyDigits(values.cpf),
-      dataNascimento: values.birthDate,
-      photo: photo || null,
-      latitude: location?.latitude ?? null,
-      longitude: location?.longitude ?? null,
-      role: { id: 2, role: 'CLIENTE' },
-      ativo: true,
-      dadosPaciente: {
-        nome: firstName || values.name.trim(),
-        sobrenome: rest.join(' '),
-        email,
-        diaConsultas: 'Quinta-Feira',
-        horarioConsultas: '16:00',
-        contatoEmergencia: values.emergencyContact.trim(),
-        telefoneEmergencia: onlyDigits(values.emergencyPhone),
-        motivoConsulta: values.reason.trim(),
-      },
-      endereco: {
-        cep: values.cep.trim(),
-        cidade: values.city.trim(),
-        bairro: values.neighborhood.trim(),
-        numero: values.number.trim(),
-        logradouro: values.address.trim(),
-        complemento: values.noComplement ? '' : values.complement.trim(),
-        semComplemento: Boolean(values.noComplement),
-      },
-      planos: { mensal: true, anual: false },
+      phone: onlyDigits(values.phone),
+      cpf: onlyDigits(values.cpf) || null,
+      birthDate: brToIso(values.birthDate),
+      photo: photo || base.photo || null,
+      address: addressParts.join(', ') || null,
+      neighborhood: values.neighborhood.trim() || null,
+      city: values.city.trim() || null,
+      state: values.state.trim() || null,
+      cep: values.cep.trim() || null,
+      emergencyContact: values.emergencyContact.trim() || null,
+      emergencyPhone: onlyDigits(values.emergencyPhone) || null,
+      clinicalNotes: values.reason.trim() || base.clinicalNotes || null,
+      latitude: location?.latitude ?? base.latitude ?? null,
+      longitude: location?.longitude ?? base.longitude ?? null,
     };
   };
 
@@ -95,20 +91,21 @@ export default function FormularioIndex() {
     setSubmitting(true);
     try {
       const location = await getCurrentLocation();
-      const payload = buildPayload(location);
       const session = getCurrentSession();
       const userId = session?.usuario?.id;
 
-      if (userId) {
-        await putPaciente(userId, payload);
-      } else {
-        await postPaciente(payload);
-      }
+      // Garante o registro de paciente (cria/vincula) e obtém seu UUID real.
+      const paciente = await getMeuPaciente(userId);
+      const payload = buildPayload(location, paciente);
+
+      const updated = await atualizarMeuPaciente(paciente.id, payload);
 
       // Marca o primeiro acesso como concluído para não cair mais no formulário.
       updateCurrentUser({
-        nome: payload.nome,
-        telefone: payload.telefone,
+        patientId: updated?.id || paciente.id,
+        nome: payload.name,
+        name: payload.name,
+        telefone: payload.phone,
         cpf: payload.cpf,
         isFirstAccess: false,
       });

@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppointmentCard } from '../AppointmentCard';
 import { CustomAlert } from '../CustomAlert';
 import { getCurrentSession } from '../../services/authService';
-import { getAgendamentosPorPaciente } from '../../services/dashboardService';
+import { getAgendamentosPorPaciente, getMeuPaciente } from '../../services/dashboardService';
 
 function formatDate(iso) {
   if (!iso) return '';
@@ -37,10 +37,15 @@ export function AgendamentosCliente() {
     let isMounted = true;
     const load = async () => {
       try {
-        const userId = session?.usuario?.id;
-        const data = await getAgendamentosPorPaciente(userId);
+        let patientId = session?.usuario?.patientId;
+        if (!patientId) {
+          const paciente = await getMeuPaciente(session?.usuario?.id);
+          patientId = paciente?.id;
+        }
+        const data = await getAgendamentosPorPaciente(patientId);
+        const list = Array.isArray(data) ? data : Array.isArray(data?.content) ? data.content : [];
         if (isMounted) {
-          setItems(Array.isArray(data) ? data : []);
+          setItems(list);
         }
       } catch (_error) {
         if (isMounted) {

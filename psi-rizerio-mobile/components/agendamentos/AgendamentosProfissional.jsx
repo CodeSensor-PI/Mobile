@@ -101,6 +101,29 @@ function isPastDateTime(isoDate, hour) {
   return scheduled < new Date();
 }
 
+// Verifica se a data (somente o dia) já passou em relação a hoje.
+function isPastDay(isoDate) {
+  if (!isoDate) return false;
+  const [year, month, day] = isoDate.split('-').map(Number);
+  const d = new Date(year, month - 1, day);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return d < today;
+}
+
+// Cor do cabeçalho do dia no calendário:
+// - verde: dia futuro com agendamento(s)
+// - teal: dia passado que teve agendamento(s)
+// - cinza: dia passado sem agendamentos
+// - cor padrão do perfil: dia futuro sem agendamentos
+function getDayHeaderColor(isoDate, hasSessions, primaryColor) {
+  const past = isPastDay(isoDate);
+  if (hasSessions && !past) return '#16a34a';
+  if (hasSessions && past) return '#0e7490';
+  if (!hasSessions && past) return '#9ca3af';
+  return primaryColor;
+}
+
 function normalizeSession(session) {
   let data = session.data;
   let hora = session.hora;
@@ -158,7 +181,24 @@ export default function AgendamentosScreen() {
   const weekDays = useMemo(() => getCurrentWeekDays(offsetSemana), [offsetSemana]);
   const monthDays = useMemo(() => getMonthDaysWithSessions(agendamentos), [agendamentos]);
   const displayDays = viewMode === 'week' ? weekDays : monthDays;
-  const clientes = useMemo(() => listClientes(), []);
+  const [clientes, setClientes] = useState([]);
+
+  useEffect(() => {
+    let mounted = true;
+    listClientes()
+      .then((list) => {
+        const arr = Array.isArray(list) ? list : [];
+        // Backend real devolve `name`; mantemos `nome` para compatibilidade da UI.
+        const normalized = arr.map((c) => ({ ...c, nome: c.nome || c.name }));
+        if (mounted) setClientes(normalized);
+      })
+      .catch(() => {
+        if (mounted) setClientes([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!getCurrentSession()) {
@@ -423,9 +463,19 @@ export default function AgendamentosScreen() {
 
             return (
               <View key={day.iso} style={styles.dayBlock}>
-                <Pressable style={[styles.dayHeader, { backgroundColor: primaryColor }]} onPress={() => setExpandedDate(expanded ? '' : day.iso)}>
+                <Pressable
+                  style={[styles.dayHeader, { backgroundColor: getDayHeaderColor(day.iso, daySessions.length > 0, primaryColor) }]}
+                  onPress={() => setExpandedDate(expanded ? '' : day.iso)}
+                >
                   <Text style={styles.dayHeaderText}>{`${day.dayName} - ${formatDisplayDate(day.iso)}`}</Text>
-                  <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color="#ffffff" />
+                  <View style={styles.dayHeaderRight}>
+                    {daySessions.length > 0 ? (
+                      <View style={styles.dayCountBadge}>
+                        <Text style={styles.dayCountText}>{daySessions.length}</Text>
+                      </View>
+                    ) : null}
+                    <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color="#ffffff" />
+                  </View>
                 </Pressable>
 
                 {expanded && (
@@ -673,6 +723,25 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '800',
     fontSize: 15,
+  },
+  dayHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dayCountBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 6,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayCountText: {
+    color: '#ffffff',
+    fontWeight: '800',
+    fontSize: 12,
   },
   dayBody: {
     padding: 12,

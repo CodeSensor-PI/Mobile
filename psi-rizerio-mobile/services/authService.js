@@ -1,6 +1,4 @@
 import {
-  findClienteByEmail,
-  findLoginRecord,
   findPsicologoByEmail,
   getPendingRecoveryEmail,
   getSession,
@@ -23,11 +21,13 @@ function buildUserPayload(record) {
 
   return {
     id: record.id,
-    nome: record.nome,
+    // O backend real devolve `name`; mantemos compatibilidade com `nome`.
+    nome: record.nome || record.name,
+    name: record.name || record.nome,
     email: record.email,
     telefone: record.telefone,
     role,
-    isFirstAccess: !record.cpf,
+    isFirstAccess: record.isFirstAccess ?? !record.cpf,
   };
 }
 
@@ -62,16 +62,35 @@ export async function postLogin(login) {
       email: payload.email || email,
     };
 
-    return persistSessionFromUser(user, data?.token);
-  } catch (_error) {
-    // Fallback local: permite autenticar com os usuários de teste do mock
-    // quando o backend está indisponível (ex.: app rodando no celular).
-    const record = findLoginRecord(email);
-    if (record && String(record.data.senha) === senha) {
-      return persistSessionFromUser(record.data, 'mock-token-mobile');
+    const session = persistSessionFromUser(user, data?.token);
+
+    // Para pacientes (USER/CLIENTE), determina o primeiro acesso a partir do
+    // perfil real: sem CPF cadastrado => abre o formulário inicial.
+    const roleName = String(session?.usuario?.role?.role || session?.usuario?.role || '').toUpperCase();
+    if (roleName === 'USER' || roleName === 'CLIENTE') {
+      try {
+        const { getMeuPaciente } = await import('./dashboardService');
+        const paciente = await getMeuPaciente(session.usuario.id);
+        return updateCurrentUser({
+          patientId: paciente?.id,
+          isFirstAccess: !paciente?.cpf,
+        });
+      } catch (_e) {
+        // Sem perfil ainda => primeiro acesso.
+        return updateCurrentUser({ isFirstAccess: true });
+      }
     }
 
-    throw buildError('Usuário ou senha inválidos.', 'INVALID_CREDENTIALS');
+    return session;
+  } catch (error) {
+    // Sem fallback mock: o app usa exclusivamente o backend real.
+    if (error?.status === 403 || error?.status === 401) {
+      throw buildError('Usuário ou senha inválidos.', 'INVALID_CREDENTIALS');
+    }
+    throw buildError(
+      'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.',
+      'NETWORK_ERROR',
+    );
   }
 }
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CustomAlert } from '../../components/CustomAlert';
@@ -86,10 +86,12 @@ export default function AdministracaoScreen() {
   const strength = useMemo(() => buildStrength(novaSenha), [novaSenha]);
   const passwordsMatch = useMemo(() => Boolean(novaSenha && confirmarSenha && novaSenha === confirmarSenha), [novaSenha, confirmarSenha]);
 
+  const initialSession = getCurrentSession();
+  const hasSession = Boolean(initialSession?.usuario?.id);
+
   useEffect(() => {
     const session = getCurrentSession();
     if (!session?.usuario?.id) {
-      router.replace('/(auth)/login');
       return;
     }
 
@@ -298,6 +300,10 @@ export default function AdministracaoScreen() {
       action();
     }
   };
+
+  if (!hasSession) {
+    return <Redirect href="/(auth)/login" />;
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
